@@ -63,6 +63,7 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.time.Duration;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
@@ -203,10 +204,10 @@ public class WalletApplication extends Application {
                             TimeUnit.MILLISECONDS, null);
                 } else {
                     final Stopwatch watch = Stopwatch.createStarted();
-                    wallet = Wallet.createDeterministic(Constants.NETWORK_PARAMETERS,
+                    wallet = Wallet.createDeterministic(Constants.NETWORK_PARAMETERS.network(),
                             Constants.DEFAULT_OUTPUT_SCRIPT_TYPE);
-                    walletFiles = wallet.autosaveToFile(walletFile, Constants.Files.WALLET_AUTOSAVE_DELAY_MS,
-                            TimeUnit.MILLISECONDS, null);
+                    final Duration duration = Duration.ofMillis(Constants.Files.WALLET_AUTOSAVE_DELAY_MS);
+                    walletFiles = wallet.autosaveToFile(walletFile, duration, null);
                     autosaveWalletNow(); // persist...
                     WalletUtils.autoBackupWallet(WalletApplication.this, wallet); // ...and backup asap
                     watch.stop();
