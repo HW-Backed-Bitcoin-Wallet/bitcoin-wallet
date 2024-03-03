@@ -188,7 +188,7 @@ public class WalletApplication extends Application {
                         wallet = new WalletProtobufSerializer().readWallet(walletStream);
                         watch.stop();
 
-                        if (!wallet.getParams().equals(Constants.NETWORK_PARAMETERS))
+                        if (!wallet.network().equals(Constants.NETWORK_PARAMETERS.network()))
                             throw new UnreadableWalletException(
                                     "bad wallet network parameters: " + wallet.getParams().getId());
 
@@ -206,12 +206,12 @@ public class WalletApplication extends Application {
                             new Toast(WalletApplication.this).postLongToast(R.string.toast_wallet_reset);
                     }
 
-                    if (!wallet.getParams().equals(Constants.NETWORK_PARAMETERS))
+                    if (!wallet.network().equals(Constants.NETWORK_PARAMETERS.network()))
                         throw new Error("bad wallet network parameters: " + wallet.getParams().getId());
 
                     wallet.cleanup();
-                    walletFiles = wallet.autosaveToFile(walletFile, Constants.Files.WALLET_AUTOSAVE_DELAY_MS,
-                            TimeUnit.MILLISECONDS, null);
+                    final Duration duration = Duration.ofMillis(Constants.Files.WALLET_AUTOSAVE_DELAY_MS);
+                    walletFiles = wallet.autosaveToFile(walletFile, duration, null);
                 } else {
                     final Stopwatch watch = Stopwatch.createStarted();
                     /*DeterministicSeed seed = new DeterministicSeed(
