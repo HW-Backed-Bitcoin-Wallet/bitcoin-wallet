@@ -34,6 +34,8 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
+import android.widget.RadioButton;
+import android.widget.RadioGroup;
 import android.widget.TextView;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.DialogFragment;
@@ -73,12 +75,17 @@ public class EncryptKeysDialogFragment extends DialogFragment {
 
     private View oldPasswordGroup;
     private EditText oldPasswordView;
+    private View newPasswordGroup;
     private EditText newPasswordView;
     private View badPasswordView;
     private TextView passwordStrengthView;
     private CheckBox showView;
     private Button positiveButton, negativeButton;
-
+    private TextView messageView;
+    private TextView warningView;
+    private RadioGroup protectionRadioGroup;
+    private RadioButton radioSpendingPin;
+    private RadioButton radioKeyStore;
     private final Handler handler = new Handler();
     private HandlerThread backgroundThread;
     private Handler backgroundHandler;
@@ -129,16 +136,18 @@ public class EncryptKeysDialogFragment extends DialogFragment {
         backgroundThread.start();
         backgroundHandler = new Handler(backgroundThread.getLooper());
     }
+    // todo: Logic that checks if the wallet is already encrypted and sets the radio button accordingly or even invisible
+    // todo: Update view needs to be aware of radio button selection
 
     @Override
     public Dialog onCreateDialog(final Bundle savedInstanceState) {
         final View view = LayoutInflater.from(activity).inflate(R.layout.encrypt_keys_dialog, null);
 
         oldPasswordGroup = view.findViewById(R.id.encrypt_keys_dialog_password_old_group);
-
         oldPasswordView = view.findViewById(R.id.encrypt_keys_dialog_password_old);
         oldPasswordView.setText(null);
 
+        newPasswordGroup = view.findViewById(R.id.encrypt_keys_dialog_password_new_group);
         newPasswordView = view.findViewById(R.id.encrypt_keys_dialog_password_new);
         newPasswordView.setText(null);
 
@@ -147,6 +156,13 @@ public class EncryptKeysDialogFragment extends DialogFragment {
         passwordStrengthView = view.findViewById(R.id.encrypt_keys_dialog_password_strength);
 
         showView = view.findViewById(R.id.encrypt_keys_dialog_show);
+        warningView = view.findViewById(R.id.encrypt_keys_dialog_warning);
+
+        messageView = view.findViewById(R.id.encrypt_keys_dialog_message);
+
+        protectionRadioGroup = view.findViewById(R.id.encrypt_keys_dialog_radio_group);
+        radioSpendingPin = view.findViewById(R.id.encrypt_keys_dialog_radio_spending_pin);
+        radioKeyStore = view.findViewById(R.id.encrypt_keys_dialog_radio_keystore);
 
         final DialogBuilder builder = DialogBuilder.custom(activity, R.string.encrypt_keys_dialog_title, view);
         // dummies, just to make buttons show
@@ -157,12 +173,30 @@ public class EncryptKeysDialogFragment extends DialogFragment {
         final AlertDialog dialog = builder.create();
         dialog.setCanceledOnTouchOutside(false);
 
+        protectionRadioGroup.setOnCheckedChangeListener((group, checkedId) -> {
+            // checkedId is the RadioButton selected
+            switch(checkedId) {
+                case R.id.encrypt_keys_dialog_radio_spending_pin:
+                    updateSpendingPinView();
+                    break;
+                case R.id.encrypt_keys_dialog_radio_keystore:
+                    updateKeyStoreView();
+                    break;
+            }
+        });
+
         dialog.setOnShowListener((OnShowListener) d -> {
             positiveButton = dialog.getButton(DialogInterface.BUTTON_POSITIVE);
             negativeButton = dialog.getButton(DialogInterface.BUTTON_NEGATIVE);
 
             positiveButton.setTypeface(Typeface.DEFAULT_BOLD);
-            positiveButton.setOnClickListener(v -> handleGo());
+            positiveButton.setOnClickListener(v -> {
+                if (protectionRadioGroup.getCheckedRadioButtonId() == R.id.encrypt_keys_dialog_radio_spending_pin) {
+                    handleGoPin();
+                } else if (protectionRadioGroup.getCheckedRadioButtonId() == R.id.encrypt_keys_dialog_radio_keystore) {
+                    handleGoKeyStore();
+                }
+            });
 
             negativeButton.setOnClickListener(v -> dismissAllowingStateLoss());
 
@@ -208,7 +242,7 @@ public class EncryptKeysDialogFragment extends DialogFragment {
         super.onDestroy();
     }
 
-    private void handleGo() {
+    private void handleGoPin() {
         final String oldPassword = Strings.emptyToNull(oldPasswordView.getText().toString().trim());
         final String newPassword = Strings.emptyToNull(newPasswordView.getText().toString().trim());
 
@@ -284,6 +318,11 @@ public class EncryptKeysDialogFragment extends DialogFragment {
         });
     }
 
+    private void handleGoKeyStore() {
+        // todo
+        System.out.println("todo");
+    }
+
     private void wipePasswords() {
         oldPasswordView.setText(null);
         newPasswordView.setText(null);
@@ -293,12 +332,46 @@ public class EncryptKeysDialogFragment extends DialogFragment {
         if (dialog == null)
             return;
 
+        if (wallet.isEncrypted()) {
+            /* todo: set one of the radio buttons to grayed out depending on which encryption type is active.
+            pseudo code:
+            if (KeyCrypter type == KeyCrypterScrypt) {
+                radioKeyStore.setEnabled(false);
+                radioSpendingPin.setChecked(true);
+            } else if ((KeyCrypter type == KeyStoreCrypter) {
+                radioSpendingPin.setEnabled(false);
+                radioKeyStore.setChecked(true);
+            } else {
+                throw new Illegal KeyCrypter exception
+            }
+            */
+            radioKeyStore.setEnabled(false);
+        } else {
+            radioKeyStore.setEnabled(true);
+            radioSpendingPin.setEnabled(true);
+        }
+
+        if (protectionRadioGroup.getCheckedRadioButtonId() == R.id.encrypt_keys_dialog_radio_spending_pin) {
+            updateSpendingPinView();
+        } else if (protectionRadioGroup.getCheckedRadioButtonId() == R.id.encrypt_keys_dialog_radio_keystore) {
+            updateKeyStoreView();
+        }
+    }
+
+    private void updateSpendingPinView() {
         final boolean hasOldPassword = !oldPasswordView.getText().toString().trim().isEmpty();
         final boolean hasPassword = !newPasswordView.getText().toString().trim().isEmpty();
+
+        messageView.setText(R.string.encrypt_keys_dialog_message_spending_pin);
+        warningView.setText(R.string.encrypt_keys_dialog_warning_spending_pin);
+
+        newPasswordGroup.setVisibility(View.VISIBLE);
+        showView.setVisibility(View.VISIBLE);
 
         oldPasswordGroup.setVisibility(wallet.isEncrypted() ? View.VISIBLE : View.GONE);
         oldPasswordView.setEnabled(state == State.INPUT);
 
+        newPasswordView.setVisibility(View.VISIBLE);
         newPasswordView.setEnabled(state == State.INPUT);
 
         final int passwordLength = newPasswordView.getText().length();
@@ -339,5 +412,37 @@ public class EncryptKeysDialogFragment extends DialogFragment {
             positiveButton.setEnabled(false);
             negativeButton.setEnabled(false);
         }
+    }
+
+    private void updateKeyStoreView() {
+        messageView.setText(R.string.encrypt_keys_dialog_message_keystore);
+        warningView.setText(R.string.encrypt_keys_dialog_warning_keystore);
+
+        oldPasswordGroup.setVisibility(View.GONE);
+        showView.setVisibility(View.GONE);
+        newPasswordGroup.setVisibility(View.GONE);
+
+        positiveButton.setEnabled(true);
+
+        if (state == State.INPUT) {
+            if (wallet.isEncrypted()) {
+                positiveButton.setText(R.string.button_remove);
+            } else {
+                positiveButton.setText(R.string.button_set);
+            }
+            negativeButton.setEnabled(true);
+        } else if (state == State.CRYPTING) {
+            positiveButton.setText(newPasswordView.getText().toString().trim().isEmpty()
+                    ? R.string.encrypt_keys_dialog_state_decrypting : R.string.encrypt_keys_dialog_state_encrypting);
+            positiveButton.setEnabled(false);
+            negativeButton.setEnabled(false);
+        } else if (state == State.DONE) {
+            positiveButton.setText(R.string.encrypt_keys_dialog_state_done);
+            positiveButton.setEnabled(false);
+            negativeButton.setEnabled(false);
+        }
+
+
+
     }
 }
