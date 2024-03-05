@@ -44,6 +44,7 @@ import de.schildbach.wallet.Configuration;
 import de.schildbach.wallet.Constants;
 import de.schildbach.wallet.R;
 import de.schildbach.wallet.WalletApplication;
+import de.schildbach.wallet.crypto.KeyStoreKeyCrypter;
 import de.schildbach.wallet.util.WalletUtils;
 
 import org.bitcoinj.crypto.AesKey;
@@ -51,6 +52,7 @@ import org.bitcoinj.crypto.KeyCrypter;
 import org.bitcoinj.crypto.KeyCrypterScrypt;
 import org.bitcoinj.wallet.Wallet;
 import org.bouncycastle.crypto.params.KeyParameter;
+import org.checkerframework.checker.units.qual.A;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -227,35 +229,25 @@ public class EncryptKeysDialogFragment extends DialogFragment {
         updateView();
 
         backgroundHandler.post(() -> {
-            // For the old key, we use the key crypter that was used to derive the password in the first
-            // place.
-            final KeyCrypter oldKeyCrypter = wallet.getKeyCrypter();
-            final AesKey oldKey = oldKeyCrypter != null && oldPassword != null ?
-                    oldKeyCrypter.deriveKey(oldPassword) : null;
 
-            // For the new key, we create a new key crypter according to the desired parameters.
-            final KeyCrypterScrypt keyCrypter = new KeyCrypterScrypt(application.scryptIterationsTarget());
-            final AesKey newKey = newPassword != null ? keyCrypter.deriveKey(newPassword) : null;
+            // Changed KeyCrypter for HSM support
+            // Only creates a Key if wallet is not encrypted
+            final KeyStoreKeyCrypter keyCrypter = new KeyStoreKeyCrypter(activity);
+            final AesKey newKey = wallet.isEncrypted() != true ? keyCrypter.deriveKey(newPassword) : null;
 
             handler.post(() -> {
-                // Decrypt from old password
+                // Decrypt wallet
                 if (wallet.isEncrypted()) {
-                    if (oldKey == null) {
-                        log.info("wallet is encrypted, but did not provide spending password");
+
+                    try {
+                        wallet.decrypt("1"); // Password is not needed but required by the KeyCrypter interface
+                        state = State.DONE;
+                        log.info("wallet successfully decrypted");
+                    } catch (final Wallet.BadWalletEncryptionKeyException x) {
+                        log.info("wallet decryption failed, bad spending password: " + x.getMessage());
+                        badPasswordView.setVisibility(View.VISIBLE);
                         state = State.INPUT;
                         oldPasswordView.requestFocus();
-                    } else {
-                        try {
-                            wallet.decrypt(oldKey);
-
-                            state = State.DONE;
-                            log.info("wallet successfully decrypted");
-                        } catch (final Wallet.BadWalletEncryptionKeyException x) {
-                            log.info("wallet decryption failed, bad spending password: " + x.getMessage());
-                            badPasswordView.setVisibility(View.VISIBLE);
-                            state = State.INPUT;
-                            oldPasswordView.requestFocus();
-                        }
                     }
                 }
 
@@ -264,13 +256,11 @@ public class EncryptKeysDialogFragment extends DialogFragment {
                         && !wallet.isEncrypted())
                     wallet.upgradeToDeterministic(Constants.UPGRADE_OUTPUT_SCRIPT_TYPE, null);
 
-                // Encrypt to new password
+                // Encrypt with new key
                 if (newKey != null && !wallet.isEncrypted()) {
                     wallet.encrypt(keyCrypter, newKey);
                     config.updateLastEncryptKeysTime();
-                    log.info(
-                            "wallet successfully encrypted, using key derived by new spending password ({} scrypt iterations)",
-                            keyCrypter.getScryptParameters().getN());
+                    log.info("wallet successfully encrypted, using Android KeyStore");
                     state = State.DONE;
                 }
 
@@ -285,6 +275,7 @@ public class EncryptKeysDialogFragment extends DialogFragment {
             });
         });
     }
+
 
     private void wipePasswords() {
         oldPasswordView.setText(null);
