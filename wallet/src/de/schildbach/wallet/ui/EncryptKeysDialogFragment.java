@@ -246,50 +246,65 @@ public class EncryptKeysDialogFragment extends DialogFragment {
         backgroundHandler.post(() -> {
 
             BiometricManager biometricManager = BiometricManager.from(requireContext());
-            int canAuthenticate = biometricManager.canAuthenticate(
-                    BiometricManager.Authenticators.BIOMETRIC_STRONG);
+            int canAuthenticate = biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG);
 
             switch (canAuthenticate) {
                 case BiometricManager.BIOMETRIC_SUCCESS:
                     // Biometric is available and the user can authenticate using biometrics.
-                    final KeyStoreKeyCrypter keyCrypter = new KeyStoreKeyCrypter(activity);
-                    final KeyParameter newKey = wallet.isEncrypted() != true ? keyCrypter.deriveKey(newPassword) : null;
+                    try {
+                        final KeyStoreKeyCrypter keyCrypter = new KeyStoreKeyCrypter(activity);
+                        final KeyParameter newKey = wallet.isEncrypted() != true ? keyCrypter.deriveKey(newPassword) : null;
+                        // Decrypt wallet
+                        if (wallet.isEncrypted()) {
 
-                    // Decrypt wallet
-                    if (wallet.isEncrypted()) {
-
-                        try {
-                            wallet.decrypt("1"); // Password is not needed but required by the KeyCrypter interface
-                            state = State.DONE;
-                            log.info("wallet successfully decrypted");
-                        } catch (final Wallet.BadWalletEncryptionKeyException x) {
-                            log.info("wallet decryption failed, bad spending password: " + x.getMessage());
-                            badPasswordView.setVisibility(View.VISIBLE);
-                            state = State.INPUT;
-                            oldPasswordView.requestFocus();
+                            try {
+                                wallet.decrypt("1"); // Password is not needed but required by the KeyCrypter interface
+                                state = State.DONE;
+                                log.info("wallet successfully decrypted");
+                            } catch (final Wallet.BadWalletEncryptionKeyException x) {
+                                log.info("wallet decryption failed, bad spending password: " + x.getMessage());
+                                badPasswordView.setVisibility(View.VISIBLE);
+                                state = State.INPUT;
+                                oldPasswordView.requestFocus();
+                            }
                         }
-                    }
 
-                    // Use opportunity to maybe upgrade wallet
-                    if (wallet.isDeterministicUpgradeRequired(Constants.UPGRADE_OUTPUT_SCRIPT_TYPE)
-                            && !wallet.isEncrypted())
-                        wallet.upgradeToDeterministic(Constants.UPGRADE_OUTPUT_SCRIPT_TYPE, null);
+                        // Use opportunity to maybe upgrade wallet
+                        if (wallet.isDeterministicUpgradeRequired(Constants.UPGRADE_OUTPUT_SCRIPT_TYPE)
+                                && !wallet.isEncrypted())
+                            wallet.upgradeToDeterministic(Constants.UPGRADE_OUTPUT_SCRIPT_TYPE, null);
 
-                    // Encrypt with new key
-                    if (newKey != null && !wallet.isEncrypted()) {
-                        wallet.encrypt(keyCrypter, newKey);
-                        config.updateLastEncryptKeysTime();
-                        log.info("wallet successfully encrypted, using Android KeyStore");
-                        state = State.DONE;
-                    }
+                        // Encrypt with new key
+                        if (newKey != null && !wallet.isEncrypted()) {
+                            wallet.encrypt(keyCrypter, newKey);
+                            config.updateLastEncryptKeysTime();
+                            log.info("wallet successfully encrypted, using Android KeyStore");
+                            state = State.DONE;
+                        }
 
-                    updateView();
+                        updateView();
 
-                    if (state == State.DONE) {
-                        WalletUtils.autoBackupWallet(activity, wallet);
-                        // trigger load manually because of missing callbacks for encryption state
-                        activityViewModel.walletEncrypted.load();
-                        handler.postDelayed(() -> dismiss(), 2000);
+                        if (state == State.DONE) {
+                            WalletUtils.autoBackupWallet(activity, wallet);
+                            // trigger load manually because of missing callbacks for encryption state
+                            activityViewModel.walletEncrypted.load();
+                            handler.postDelayed(() -> dismiss(), 2000);
+                        }
+                    } catch (KeyCrypterException e) {
+                        handler.post(() -> {
+                            new AlertDialog.Builder(activity)
+                                    .setTitle("Unsupported android version")
+                                    .setMessage("This android version does not support the " +
+                                            "required strong biometric authentication " +
+                                            "(fingerprint, iris, or face)")
+                                    .setPositiveButton(android.R.string.ok, (dialog, which) -> {
+                                        state = State.INPUT;
+                                        updateView();
+                                    })
+                                    .setIcon(android.R.drawable.ic_dialog_alert)
+                                    .show();
+                        });
+                        break;
                     }
                     break;
                 case BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE:

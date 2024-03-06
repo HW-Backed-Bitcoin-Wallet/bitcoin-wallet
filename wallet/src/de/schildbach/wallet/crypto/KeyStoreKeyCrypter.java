@@ -2,6 +2,7 @@ package de.schildbach.wallet.crypto;
 
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.os.Build;
 import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
 
@@ -65,28 +66,36 @@ public class KeyStoreKeyCrypter extends KeyCrypterScrypt {
                     keyGenerator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, KEY_STORE_PROVIDER);
                     KeyGenParameterSpec keyGenParameterSpec;
                     // If else block to indicate a preference to use the embedded Secure Element over other hardware security modules like e.g. the TEE
-                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P
-                            && context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_STRONGBOX_KEYSTORE)) {
-                        keyGenParameterSpec = new KeyGenParameterSpec.Builder(KEY_STORE_KEY_REF,
-                                KeyProperties.PURPOSE_ENCRYPT | KeyProperties.PURPOSE_DECRYPT)
-                                .setKeySize(256)
-                                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-                                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-                                .setIsStrongBoxBacked(true)
-                                .setUserAuthenticationRequired(true)
-                                .build();
-                        log.info("Using SE: " + keyGenParameterSpec.isStrongBoxBacked());
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        if (context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_STRONGBOX_KEYSTORE)) {
+                            keyGenParameterSpec = new KeyGenParameterSpec.Builder(KEY_STORE_KEY_REF,
+                                    KeyProperties.PURPOSE_ENCRYPT | KeyProperties.PURPOSE_DECRYPT)
+                                    .setKeySize(256)
+                                    .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                                    .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                                    .setUserAuthenticationRequired(true)
+                                    .setInvalidatedByBiometricEnrollment(true)
+                                    .setUserConfirmationRequired(true)
+                                    .setIsStrongBoxBacked(true)
+                                    .build();
+                            log.info("Using SE: " + keyGenParameterSpec.isStrongBoxBacked());
+                        } else {
+                            keyGenParameterSpec = new KeyGenParameterSpec.Builder(KEY_STORE_KEY_REF,
+                                    KeyProperties.PURPOSE_ENCRYPT | KeyProperties.PURPOSE_DECRYPT)
+                                    .setKeySize(256)
+                                    .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                                    .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                                    .setUserAuthenticationRequired(true)
+                                    .setInvalidatedByBiometricEnrollment(true)
+                                    .setUserConfirmationRequired(true)
+                                    .setIsStrongBoxBacked(false)
+                                    .build();
+                            log.info("Using SE: false, but using Android Key Store");
+                        }
                     } else {
-                        keyGenParameterSpec = new KeyGenParameterSpec.Builder(KEY_STORE_KEY_REF,
-                                KeyProperties.PURPOSE_ENCRYPT | KeyProperties.PURPOSE_DECRYPT)
-                                .setKeySize(256)
-                                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-                                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-                                .setUserAuthenticationRequired(true)
-                                .build();
-                        log.info("Using SE: false, but using Android Key Store");
+                        log.info("Android version 28 or higher is required for KeyStore encryption");
+                        throw new KeyCrypterException("Android version 28 or higher is required for KeyStore encryption");
                     }
-
                     keyGenerator.init(keyGenParameterSpec);
                 } catch (NoSuchAlgorithmException | NoSuchProviderException | InvalidAlgorithmParameterException e) {
                     log.info("Exception was " + e.getClass());
