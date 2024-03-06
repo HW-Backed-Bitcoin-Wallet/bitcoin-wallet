@@ -11,3 +11,6 @@ local.properties
 *.iml
 bin/
 gen/
+.DS_Store
+wallet/.DS_Store
+wallet/libs/
