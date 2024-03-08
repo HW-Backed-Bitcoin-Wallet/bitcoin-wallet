@@ -206,6 +206,12 @@ public final class Constants {
     public static final int SCRYPT_ITERATIONS_TARGET = 65536;
     public static final int SCRYPT_ITERATIONS_TARGET_LOWRAM = 32768;
 
+    /** KeyStore Key Reference */
+    public static final String KEY_STORE_KEY_REF = "BitcoinWalletKey";
+    /** KeyStore Provider */
+    public static final String KEY_STORE_PROVIDER = "AndroidKeyStore";
+    public static final String KEY_STORE_TRANSFORMATION = "AES/GCM/NoPadding";
+
     /** Default ports for Electrum servers */
     public static final int ELECTRUM_SERVER_DEFAULT_PORT_TCP = NETWORK_PARAMETERS.getId()
             .equals(NetworkParameters.ID_MAINNET) ? 50001 : 51001;

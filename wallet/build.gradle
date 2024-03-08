@@ -23,8 +23,9 @@ dependencies {
     implementation 'androidx.sqlite:sqlite:2.4.0'
     implementation "androidx.room:room-runtime:2.6.1"
     annotationProcessor "androidx.room:room-compiler:2.6.1"
+    implementation 'androidx.biometric:biometric:1.2.0-alpha04'
     implementation 'org.bitcoinj:bitcoinj-core:0.16.2'
-    implementation 'com.google.guava:guava:33.0.0-android'
+    implementation 'com.google.guava:guava:31.1-android'
     implementation 'com.google.zxing:core:3.5.2'
     //noinspection GradleDependency
     implementation 'com.squareup.okhttp3:okhttp:3.14.9'
@@ -42,16 +43,17 @@ ext {
 
 android {
     compileSdkVersion 'android-34'
-    buildToolsVersion '34.0.0'
+    buildToolsVersion '30.0.3'
 
     defaultConfig {
         applicationId 'de.schildbach'
+        minSdkVersion 28
     }
 
     buildTypes {
         all {
-            minifyEnabled true
-            shrinkResources true
+            minifyEnabled false
+            shrinkResources false
             crunchPngs false
             proguardFile 'proguard.cfg'
         }
