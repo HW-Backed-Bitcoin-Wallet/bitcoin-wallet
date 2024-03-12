@@ -73,25 +73,25 @@ public class KeyStoreKeyCrypter extends KeyCrypterScrypt {
                                     .setKeySize(256)
                                     .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
                                     .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-                                    .setUserAuthenticationRequired(true)
-                                    .setInvalidatedByBiometricEnrollment(true)
-                                    .setUserConfirmationRequired(true)
+                                    //.setUserAuthenticationRequired(true)
+                                    //.setInvalidatedByBiometricEnrollment(true)
+                                    //.setUserConfirmationRequired(true)
+                                    //.setUserAuthenticationValidityDurationSeconds(5) // in case of multiple actions?
                                     .setIsStrongBoxBacked(true)
                                     .build();
-                            log.info("Using SE: " + keyGenParameterSpec.isStrongBoxBacked());
                         } else {
                             keyGenParameterSpec = new KeyGenParameterSpec.Builder(KEY_STORE_KEY_REF,
                                     KeyProperties.PURPOSE_ENCRYPT | KeyProperties.PURPOSE_DECRYPT)
                                     .setKeySize(256)
                                     .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
                                     .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-                                    .setUserAuthenticationRequired(true)
-                                    .setInvalidatedByBiometricEnrollment(true)
-                                    .setUserConfirmationRequired(true)
+                                    //.setUserAuthenticationRequired(true)
+                                    //.setInvalidatedByBiometricEnrollment(true)
+                                    //.setUserConfirmationRequired(true)
                                     .setIsStrongBoxBacked(false)
                                     .build();
-                            log.info("Using SE: false, but using Android Key Store");
                         }
+                        log.info("Using SE: " + keyGenParameterSpec.isStrongBoxBacked());
                     } else {
                         log.info("Android version 28 or higher is required for KeyStore encryption");
                         throw new KeyCrypterException("Android version 28 or higher is required for KeyStore encryption");
@@ -132,10 +132,11 @@ public class KeyStoreKeyCrypter extends KeyCrypterScrypt {
             cipher.init(Cipher.DECRYPT_MODE, secretKey, spec);
             return cipher.doFinal(encryptedBytesToDecode.encryptedBytes);
         } catch (Exception e) {
-            log.info("Exception was " + e.getClass());
+            log.info("Exception was: " + e.getClass());
             throw new KeyCrypterException("Could not encrypt bytes.", e);
         }
     }
+
 
     /**
      * Encrypts data with an AES key stored in the Android key store
@@ -158,7 +159,7 @@ public class KeyStoreKeyCrypter extends KeyCrypterScrypt {
             byte[] encryptedText = cipher.doFinal(plainBytes);
             return new EncryptedData(cipher.getIV(), encryptedText);
         } catch (Exception e) {
-            log.info("Exception was" + e.getClass());
+            log.info("Exception was: " + e.getClass());
             throw new KeyCrypterException("Could not encrypt bytes.", e);
         }
     }
@@ -170,6 +171,7 @@ public class KeyStoreKeyCrypter extends KeyCrypterScrypt {
      * As none match fully, we need to make due with what we got. We can take the ENCRYPTED_SCRYPT_AES enum even though
      * we don't use a passphrase based KDF of scrypt, as we are using the secure element of the Android device.
      */
+
     @Override
     public EncryptionType getUnderstoodEncryptionType() {
         return EncryptionType.ENCRYPTED_SCRYPT_AES;

@@ -24,7 +24,6 @@ import android.content.DialogInterface;
 import android.content.DialogInterface.OnShowListener;
 import android.content.Intent;
 import android.graphics.Typeface;
-
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.biometric.BiometricManager;
@@ -155,8 +154,6 @@ public class EncryptKeysDialogFragment extends DialogFragment {
                     updateView();
                 });
     }
-    // todo: Logic that checks if the wallet is already encrypted and sets the radio button accordingly or even invisible
-    // todo: Update view needs to be aware of radio button selection
 
     @Override
     public Dialog onCreateDialog(final Bundle savedInstanceState) {
@@ -193,15 +190,7 @@ public class EncryptKeysDialogFragment extends DialogFragment {
         dialog.setCanceledOnTouchOutside(false);
 
         protectionRadioGroup.setOnCheckedChangeListener((group, checkedId) -> {
-            // checkedId is the RadioButton selected
-            switch(checkedId) {
-                case R.id.encrypt_keys_dialog_radio_spending_pin:
-                    updateSpendingPinView();
-                    break;
-                case R.id.encrypt_keys_dialog_radio_keystore:
-                    updateKeyStoreView();
-                    break;
-            }
+            updateView();
         });
 
         dialog.setOnShowListener((OnShowListener) d -> {
@@ -278,53 +267,194 @@ public class EncryptKeysDialogFragment extends DialogFragment {
         updateView();
 
         backgroundHandler.post(() -> {
+            // For the old key, we use the key crypter that was used to derive the password in the first
+            // place.
+            final KeyCrypter oldKeyCrypter = wallet.getKeyCrypter();
+            final KeyParameter oldKey = oldKeyCrypter != null && oldPassword != null ?
+                    oldKeyCrypter.deriveKey(oldPassword) : null;
+
+            // For the new key, we create a new key crypter according to the desired parameters.
+            final KeyCrypterScrypt keyCrypter = new KeyCrypterScrypt(application.scryptIterationsTarget());
+            final KeyParameter newKey = newPassword != null ? keyCrypter.deriveKey(newPassword) : null;
+
+            handler.post(() -> {
+                // Decrypt from old password
+                if (wallet.isEncrypted()) {
+                    if (oldKey == null) {
+                        log.info("wallet is encrypted, but did not provide spending password");
+                        state = State.INPUT;
+                        oldPasswordView.requestFocus();
+                    } else {
+                        try {
+                            wallet.decrypt(oldKey);
+
+                            state = State.DONE;
+                            log.info("wallet successfully decrypted");
+                        } catch (final Wallet.BadWalletEncryptionKeyException x) {
+                            log.info("wallet decryption failed, bad spending password: " + x.getMessage());
+                            badPasswordView.setVisibility(View.VISIBLE);
+                            state = State.INPUT;
+                            oldPasswordView.requestFocus();
+                        }
+                    }
+                }
+
+                // Use opportunity to maybe upgrade wallet
+                if (wallet.isDeterministicUpgradeRequired(Constants.UPGRADE_OUTPUT_SCRIPT_TYPE)
+                        && !wallet.isEncrypted())
+                    wallet.upgradeToDeterministic(Constants.UPGRADE_OUTPUT_SCRIPT_TYPE, null);
+
+                // Encrypt to new password
+                if (newKey != null && !wallet.isEncrypted()) {
+                    wallet.encrypt(keyCrypter, newKey);
+                    config.updateLastEncryptKeysTime();
+                    log.info(
+                            "wallet successfully encrypted, using key derived by new spending password ({} scrypt iterations)",
+                            keyCrypter.getScryptParameters().getN());
+                    state = State.DONE;
+                }
+
+                updateView();
+
+                if (state == State.DONE) {
+                    WalletUtils.autoBackupWallet(activity, wallet);
+                    // trigger load manually because of missing callbacks for encryption state
+                    activityViewModel.walletEncrypted.load();
+                    handler.postDelayed(() -> dismiss(), 2000);
+                }
+            });
+        });
+    }
+
+    private void handleGoKeyStore() {
+
+        if (wallet.isEncrypted())
+            log.info("removing keystore encryption");
+        else if (!wallet.isEncrypted())
+            log.info("activating keystore encryption ");
+        else
+            throw new IllegalStateException();
+
+
+        backgroundHandler.post(() -> {
 
             BiometricManager biometricManager = BiometricManager.from(requireContext());
             int canAuthenticate = biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG);
 
-            switch (canAuthenticate) {
-                case BiometricManager.BIOMETRIC_SUCCESS:
-                    // Biometric is available and the user can authenticate using biometrics.
-                    try {
-                        final KeyStoreKeyCrypter keyCrypter = new KeyStoreKeyCrypter(activity);
-                        final KeyParameter newKey = wallet.isEncrypted() != true ? keyCrypter.deriveKey(newPassword) : null;
-                        // Decrypt wallet
-                        if (wallet.isEncrypted()) {
+            handler.post(() -> {
+                switch (canAuthenticate) {
+                    case BiometricManager.BIOMETRIC_SUCCESS:
+                        // Biometric is available and the user can authenticate using biometrics.
+                        state = State.CRYPTING;
+                        updateView();
+                        try {
+                            final KeyStoreKeyCrypter keyCrypter = new KeyStoreKeyCrypter(activity);
+                            final KeyParameter newKey = wallet.isEncrypted() != true ? keyCrypter.deriveKey(null) : null;
 
-                            try {
+                            // Decrypt wallet
+                            if (wallet.isEncrypted()) {
                                 wallet.decrypt("1"); // Password is not needed but required by the KeyCrypter interface
                                 state = State.DONE;
                                 log.info("wallet successfully decrypted");
-                            } catch (final Wallet.BadWalletEncryptionKeyException x) {
-                                log.info("wallet decryption failed, bad spending password: " + x.getMessage());
-                                badPasswordView.setVisibility(View.VISIBLE);
-                                state = State.INPUT;
-                                oldPasswordView.requestFocus();
                             }
+                            // Use opportunity to maybe upgrade wallet
+                            if (wallet.isDeterministicUpgradeRequired(Constants.UPGRADE_OUTPUT_SCRIPT_TYPE)
+                                    && !wallet.isEncrypted())
+                                wallet.upgradeToDeterministic(Constants.UPGRADE_OUTPUT_SCRIPT_TYPE, null);
+
+                            // Encrypt with new key in the KeyStore
+                            if (newKey != null && !wallet.isEncrypted()) {
+                                wallet.encrypt(keyCrypter, newKey);
+                                config.updateLastEncryptKeysTime();
+                                log.info("wallet successfully encrypted, using Android KeyStore");
+                                state = State.DONE;
+                            }
+                            updateView();
+
+                            if (state == State.DONE) {
+                                WalletUtils.autoBackupWallet(activity, wallet);
+                                // trigger load manually because of missing callbacks for encryption state
+                                activityViewModel.walletEncrypted.load();
+                                handler.postDelayed(() -> dismiss(), 2000);
+                            }
+                        } catch (KeyCrypterException e) {
+                            handler.post(() -> {
+                                new AlertDialog.Builder(activity)
+                                        .setTitle("Unsupported android version")
+                                        .setMessage("This android version does not support the " +
+                                                "required strong biometric authentication " +
+                                                "(fingerprint, iris, or face)")
+                                        .setPositiveButton(android.R.string.ok, (dialog, which) -> {
+                                            state = State.INPUT;
+                                            updateView();
+                                        })
+                                        .setIcon(android.R.drawable.ic_dialog_alert)
+                                        .show();
+                            });
+                            break;
                         }
-
-                        // Use opportunity to maybe upgrade wallet
-                        if (wallet.isDeterministicUpgradeRequired(Constants.UPGRADE_OUTPUT_SCRIPT_TYPE)
-                                && !wallet.isEncrypted())
-                            wallet.upgradeToDeterministic(Constants.UPGRADE_OUTPUT_SCRIPT_TYPE, null);
-
-                        // Encrypt with new key
-                        if (newKey != null && !wallet.isEncrypted()) {
-                            wallet.encrypt(keyCrypter, newKey);
-                            config.updateLastEncryptKeysTime();
-                            log.info("wallet successfully encrypted, using Android KeyStore");
-                            state = State.DONE;
-                        }
-
-                        updateView();
-
-                        if (state == State.DONE) {
-                            WalletUtils.autoBackupWallet(activity, wallet);
-                            // trigger load manually because of missing callbacks for encryption state
-                            activityViewModel.walletEncrypted.load();
-                            handler.postDelayed(() -> dismiss(), 2000);
-                        }
-                    } catch (KeyCrypterException e) {
+                        break;
+                    case BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE:
+                        handler.post(() -> {
+                            new AlertDialog.Builder(activity)
+                                    .setTitle("No biometric hardware available")
+                                    .setMessage("This device does not support biometric authentication. " +
+                                            "Please use Spending PIN instead of KeyStore encryption")
+                                    .setPositiveButton(android.R.string.ok, (dialog, which) -> {
+                                        state = State.INPUT;
+                                        updateView();
+                                    })
+                                    .setIcon(android.R.drawable.ic_dialog_alert)
+                                    .show();
+                        });
+                        break;
+                    case BiometricManager.BIOMETRIC_ERROR_HW_UNAVAILABLE:
+                        // Biometric features are currently unavailable.
+                        handler.post(() -> {
+                            new AlertDialog.Builder(activity)
+                                    .setTitle("Biometric hardware is currently unavailable")
+                                    .setMessage("Biometric hardware is currently unavailable")
+                                    .setPositiveButton(android.R.string.ok, (dialog, which) -> {
+                                        state = State.INPUT;
+                                        updateView();
+                                    })
+                                    .setIcon(android.R.drawable.ic_dialog_alert)
+                                    .show();
+                        });
+                        break;
+                    case BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED:
+                        // The user hasn't associated any biometric credentials with their account/device.
+                        handler.post(() -> {
+                            new AlertDialog.Builder(activity)
+                                    .setTitle("Biometric authentication not enrolled")
+                                    .setMessage("Please enroll biometric authentication " +
+                                            "to use KeyStore encryption")
+                                    .setPositiveButton(android.R.string.ok, (dialog, which) -> {
+                                        state = State.INPUT;
+                                        Intent enrollIntent = new Intent(Settings.ACTION_SECURITY_SETTINGS);
+                                        biometricEnrollmentResultLauncher.launch(enrollIntent);
+                                    })
+                                    .setIcon(android.R.drawable.ic_dialog_alert)
+                                    .show();
+                        });
+                        break;
+                    case BiometricManager.BIOMETRIC_ERROR_SECURITY_UPDATE_REQUIRED:
+                        // A security update is required before biometrics can be used.
+                        handler.post(() -> {
+                            new AlertDialog.Builder(activity)
+                                    .setTitle("Security update required")
+                                    .setMessage("A security update is required to use " +
+                                            "KeyStore encryption with biometric authentication")
+                                    .setPositiveButton(android.R.string.ok, (dialog, which) -> {
+                                        state = State.INPUT;
+                                        updateView();
+                                    })
+                                    .setIcon(android.R.drawable.ic_dialog_alert)
+                                    .show();
+                        });
+                        break;
+                    case BiometricManager.BIOMETRIC_ERROR_UNSUPPORTED:
+                        // The specified options are incompatible with the current Android version.
                         handler.post(() -> {
                             new AlertDialog.Builder(activity)
                                     .setTitle("Unsupported android version")
@@ -339,107 +469,26 @@ public class EncryptKeysDialogFragment extends DialogFragment {
                                     .show();
                         });
                         break;
-                    }
-                    break;
-                case BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE:
-                    handler.post(() -> {
-                        new AlertDialog.Builder(activity)
-                                .setTitle("No biometric hardware available")
-                                .setMessage("This device does not support biometric authentication. " +
-                                        "Please use Spending PIN instead of KeyStore encryption")
-                                .setPositiveButton(android.R.string.ok, (dialog, which) -> {
-                                    state = State.INPUT;
-                                    updateView();
-                                })
-                                .setIcon(android.R.drawable.ic_dialog_alert)
-                                .show();
-                    });
-                    break;
-                case BiometricManager.BIOMETRIC_ERROR_HW_UNAVAILABLE:
-                    // Biometric features are currently unavailable.
-                    handler.post(() -> {
-                        new AlertDialog.Builder(activity)
-                                .setTitle("Biometric hardware is currently unavailable")
-                                .setMessage("Biometric hardware is currently unavailable")
-                                .setPositiveButton(android.R.string.ok, (dialog, which) -> {
-                                    state = State.INPUT;
-                                    updateView();
-                                })
-                                .setIcon(android.R.drawable.ic_dialog_alert)
-                                .show();
-                    });
-                    break;
-                case BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED:
-                    // The user hasn't associated any biometric credentials with their account/device.
-                    handler.post(() -> {
-                        new AlertDialog.Builder(activity)
-                                .setTitle("Biometric authentication not enrolled")
-                                .setMessage("Please enroll biometric authentication " +
-                                        "to use KeyStore encryption")
-                                .setPositiveButton(android.R.string.ok, (dialog, which) -> {
-                                    state = State.INPUT;
-                                    Intent enrollIntent = new Intent(Settings.ACTION_SECURITY_SETTINGS);
-                                    biometricEnrollmentResultLauncher.launch(enrollIntent);
-                                })
-                                .setIcon(android.R.drawable.ic_dialog_alert)
-                                .show();
-                    });
-                    break;
-                case BiometricManager.BIOMETRIC_ERROR_SECURITY_UPDATE_REQUIRED:
-                    // A security update is required before biometrics can be used.
-                    handler.post(() -> {
-                        new AlertDialog.Builder(activity)
-                                .setTitle("Security update required")
-                                .setMessage("A security update is required to use " +
-                                        "KeyStore encryption with biometric authentication")
-                                .setPositiveButton(android.R.string.ok, (dialog, which) -> {
-                                    state = State.INPUT;
-                                    updateView();
-                                })
-                                .setIcon(android.R.drawable.ic_dialog_alert)
-                                .show();
-                    });
-                    break;
-                case BiometricManager.BIOMETRIC_ERROR_UNSUPPORTED:
-                    // The specified options are incompatible with the current Android version.
-                    handler.post(() -> {
-                        new AlertDialog.Builder(activity)
-                                .setTitle("Unsupported android version")
-                                .setMessage("This android version does not support the " +
-                                        "required strong biometric authentication " +
-                                        "(fingerprint, iris, or face)")
-                                .setPositiveButton(android.R.string.ok, (dialog, which) -> {
-                                    state = State.INPUT;
-                                    updateView();
-                                })
-                                .setIcon(android.R.drawable.ic_dialog_alert)
-                                .show();
-                    });
-                    break;
-                case BiometricManager.BIOMETRIC_STATUS_UNKNOWN:
-                default:
-                    // Unable to determine whether the user can authenticate.
-                    handler.post(() -> {
-                        new AlertDialog.Builder(activity)
-                                .setTitle("Unknown error")
-                                .setMessage("An unknown error occured. Please make sure " +
-                                        "this device supports strong biometric authentication " +
-                                        "(fingerprint, iris, or face)")
-                                .setPositiveButton(android.R.string.ok, (dialog, which) -> {
-                                    state = State.INPUT;
-                                    updateView();
-                                })
-                                .setIcon(android.R.drawable.ic_dialog_alert)
-                                .show();
-                    });
-                    break;
-            }
+                    case BiometricManager.BIOMETRIC_STATUS_UNKNOWN:
+                    default:
+                        // Unable to determine whether the user can authenticate.
+                        handler.post(() -> {
+                            new AlertDialog.Builder(activity)
+                                    .setTitle("Unknown error")
+                                    .setMessage("An unknown error occured. Please make sure " +
+                                            "this device supports strong biometric authentication " +
+                                            "(fingerprint, iris, or face)")
+                                    .setPositiveButton(android.R.string.ok, (dialog, which) -> {
+                                        state = State.INPUT;
+                                        updateView();
+                                    })
+                                    .setIcon(android.R.drawable.ic_dialog_alert)
+                                    .show();
+                        });
+                        break;
+                }
+            });
         });
-    }
-
-    private void handleGoKeyStore() {
-        // todo
-        System.out.println("todo");
     }
 
     private void wipePasswords() {
@@ -451,23 +500,26 @@ public class EncryptKeysDialogFragment extends DialogFragment {
         if (dialog == null)
             return;
 
-        if (wallet.isEncrypted()) {
-            /* todo: set one of the radio buttons to grayed out depending on which encryption type is active.
-            pseudo code:
-            if (KeyCrypter type == KeyCrypterScrypt) {
-                radioKeyStore.setEnabled(false);
-                radioSpendingPin.setChecked(true);
-            } else if ((KeyCrypter type == KeyStoreCrypter) {
-                radioSpendingPin.setEnabled(false);
-                radioKeyStore.setChecked(true);
+        if (state == State.INPUT) {
+            if (wallet.isEncrypted()) {
+                KeyCrypter keyCrypter = wallet.getKeyCrypter();
+
+                if (keyCrypter instanceof KeyStoreKeyCrypter) {
+                    radioSpendingPin.setEnabled(false);
+                    radioKeyStore.setEnabled(true);
+                    radioKeyStore.setChecked(true);
+                } else if (keyCrypter instanceof KeyCrypterScrypt && !(keyCrypter instanceof KeyStoreKeyCrypter)) {
+                    radioKeyStore.setEnabled(false);
+                    radioSpendingPin.setEnabled(true);
+                    radioSpendingPin.setChecked(true);
+                } else {
+                    // Some other form of encryption has been specified that we do not understand.
+                    throw new RuntimeException("The wallet has encryption of type '" + keyCrypter.getUnderstoodEncryptionType() + "' but this is not supported.");
+                }
             } else {
-                throw new Illegal KeyCrypter exception
+                radioKeyStore.setEnabled(true);
+                radioSpendingPin.setEnabled(true);
             }
-            */
-            radioKeyStore.setEnabled(false);
-        } else {
-            radioKeyStore.setEnabled(true);
-            radioSpendingPin.setEnabled(true);
         }
 
         if (protectionRadioGroup.getCheckedRadioButtonId() == R.id.encrypt_keys_dialog_radio_spending_pin) {
@@ -551,7 +603,7 @@ public class EncryptKeysDialogFragment extends DialogFragment {
             }
             negativeButton.setEnabled(true);
         } else if (state == State.CRYPTING) {
-            positiveButton.setText(newPasswordView.getText().toString().trim().isEmpty()
+            positiveButton.setText(wallet.isEncrypted()
                     ? R.string.encrypt_keys_dialog_state_decrypting : R.string.encrypt_keys_dialog_state_encrypting);
             positiveButton.setEnabled(false);
             negativeButton.setEnabled(false);
@@ -560,8 +612,5 @@ public class EncryptKeysDialogFragment extends DialogFragment {
             positiveButton.setEnabled(false);
             negativeButton.setEnabled(false);
         }
-
-
-
     }
 }
