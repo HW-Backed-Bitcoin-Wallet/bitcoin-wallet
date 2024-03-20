@@ -7,6 +7,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
+import android.security.keystore.UserNotAuthenticatedException;
 
 import com.google.common.base.Stopwatch;
 import com.google.common.util.concurrent.SettableFuture;
@@ -16,6 +17,7 @@ import org.bitcoinj.crypto.EncryptedData;
 import org.bitcoinj.crypto.KeyCrypterException;
 import org.bitcoinj.crypto.KeyCrypterScrypt;
 import org.bitcoinj.utils.ContextPropagatingThreadFactory;
+import org.bitcoinj.wallet.Protos;
 import org.bitcoinj.wallet.Protos.Wallet.EncryptionType;
 import org.bouncycastle.crypto.params.KeyParameter;
 import org.slf4j.Logger;
@@ -45,33 +47,27 @@ import static de.schildbach.wallet.Constants.KEY_STORE_PROVIDER;
 import static de.schildbach.wallet.Constants.KEY_STORE_TRANSFORMATION;
 
 import androidx.annotation.AnyThread;
+import androidx.annotation.RequiresApi;
 import androidx.biometric.BiometricPrompt;
 import androidx.fragment.app.FragmentActivity;
 
 public class KeyStoreKeyCrypter extends KeyCrypterScrypt {
 
     private static final Logger log = LoggerFactory.getLogger(KeyStoreKeyCrypter.class);
+    private static final int TAG_LENGTH = 128; // bits
+    private static final int KEY_LENGTH = 256; // bits
+    private static final int KEY_AUTHENTICATION_DURATION = 15; // seconds
     private final Context context;
-    private BiometricPrompt encryptBiometricPrompt;
-    private BiometricPrompt decryptBiometricPrompt;
     private BiometricPrompt.PromptInfo promptInfo;
     private CompletableFuture<EncryptedData> encryptionFuture;
     private CompletableFuture<byte[]> decryptionFuture;
-
-    // Synchronization lock and results
-    private final Object encryptLock = new Object();
-    private final Object decryptLock = new Object();
-    private EncryptedData encryptedDataResult;
-    private byte[] decryptedDataResult;
-
     private byte[] currentPlainBytes;
     private EncryptedData currentEncryptedData;
 
     public KeyStoreKeyCrypter(Context context) {
         this.context = context;
         promptInfo = createPromptInfo();
-        encryptBiometricPrompt = createBiometricPrompt(encryptLock, true);
-        decryptBiometricPrompt = createBiometricPrompt(decryptLock, false);
+
     }
 
     /**
@@ -80,6 +76,7 @@ public class KeyStoreKeyCrypter extends KeyCrypterScrypt {
      * @return AesKey
      * @throws KeyCrypterException
      */
+    @RequiresApi(api = Build.VERSION_CODES.R)
     @Override
     public KeyParameter deriveKey(CharSequence unusedPassword) throws KeyCrypterException {
         KeyStore keyStore;
@@ -97,23 +94,23 @@ public class KeyStoreKeyCrypter extends KeyCrypterScrypt {
                         if (context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_STRONGBOX_KEYSTORE)) {
                             keyGenParameterSpec = new KeyGenParameterSpec.Builder(KEY_STORE_KEY_REF,
                                     KeyProperties.PURPOSE_ENCRYPT | KeyProperties.PURPOSE_DECRYPT)
-                                    .setKeySize(256)
+                                    .setKeySize(KEY_LENGTH)
                                     .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
                                     .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
                                     .setUserAuthenticationRequired(true)
                                     .setInvalidatedByBiometricEnrollment(true)
-                                    .setUserAuthenticationParameters(5, 0) // in case of multiple actions?
+                                    .setUserAuthenticationParameters(KEY_AUTHENTICATION_DURATION, KeyProperties.AUTH_BIOMETRIC_STRONG) // in case of multiple actions?
                                     .setIsStrongBoxBacked(true)
                                     .build();
                         } else {
                             keyGenParameterSpec = new KeyGenParameterSpec.Builder(KEY_STORE_KEY_REF,
                                     KeyProperties.PURPOSE_ENCRYPT | KeyProperties.PURPOSE_DECRYPT)
-                                    .setKeySize(256)
+                                    .setKeySize(KEY_LENGTH)
                                     .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
                                     .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
                                     .setUserAuthenticationRequired(true)
                                     .setInvalidatedByBiometricEnrollment(true)
-                                    .setUserAuthenticationParameters(5, 0) // in case of multiple actions?
+                                    .setUserAuthenticationParameters(5, KeyProperties.AUTH_BIOMETRIC_STRONG) // in case of multiple actions?
                                     .setIsStrongBoxBacked(false)
                                     .build();
                         }
@@ -141,41 +138,66 @@ public class KeyStoreKeyCrypter extends KeyCrypterScrypt {
     /**
      * Decrypt bytes previously encrypted with this class.
      *
-     * @param encryptedDataToDecrypt    IV and data to decrypt
+     * @param dataToDecrypt    IV and data to decrypt
      * @param unusedAesKey              Required only by the interface. The key doesn't actually get used.
      * @return                          The decrypted bytes
      * @throws                          KeyCrypterException if bytes could not be decrypted
      */
     @Override
-    public byte[] decrypt(EncryptedData encryptedDataToDecrypt, KeyParameter unusedAesKey) throws KeyCrypterException {
-        synchronized (decryptLock) {
-            this.currentEncryptedData = encryptedDataToDecrypt;  // Set the currentEncryptedData before authentication
-            decryptedDataResult = null;  // Reset previous result
-            // Start authentication
-            Cipher cipher;
+    public byte[] decrypt(EncryptedData dataToDecrypt, KeyParameter unusedAesKey) throws KeyCrypterException {
+        log.info("Starting KeyStoreKeyCrypter decrypt method");
+        try {
+            return doDecrypt(dataToDecrypt);
+        } catch (UserNotAuthenticatedException e) {
+            // User must authenticate so catch exception and continue
+        }
+        catch (Exception e) {
+            log.info("Exception was" + e.getClass());
+            throw new KeyCrypterException("Could not decrypt the encrypted data.", e);
+        }
+
+        // only reach code if user needs to authenticate
+        decryptionFuture = new CompletableFuture<>();
+        this.currentEncryptedData = dataToDecrypt;
+
+        // Move to the UI thread to call authenticate
+        log.info("got right in front of decrypt new Handler call");
+        new Handler(Looper.getMainLooper()).post(() -> {
+            log.info("Is Main Thread: " + (Looper.myLooper() == Looper.getMainLooper()));
             try {
-                KeyStore keyStore = KeyStore.getInstance(KEY_STORE_PROVIDER);
-                keyStore.load(null);
-                SecretKey secretKey = (SecretKey) keyStore.getKey(KEY_STORE_KEY_REF, null);
-                cipher = Cipher.getInstance(KEY_STORE_TRANSFORMATION);
-                GCMParameterSpec spec = new GCMParameterSpec(128, encryptedDataToDecrypt.initialisationVector);
-                cipher.init(Cipher.DECRYPT_MODE, secretKey, spec);
-                decryptBiometricPrompt.authenticate(promptInfo, new BiometricPrompt.CryptoObject(cipher));
+                BiometricPrompt decryptBiometricPrompt = createBiometricPrompt(false);
+                decryptBiometricPrompt.authenticate(promptInfo);
             } catch (Exception e) {
-                throw new KeyCrypterException("Failed to initialize decryption", e);
+                decryptionFuture.completeExceptionally(new KeyCrypterException("Failed to initialize encryption", e));
             }
+        });
 
-            try {
-                decryptLock.wait(); // Wait for authentication to complete
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt(); // Restore the interrupted status
-                throw new KeyCrypterException("Decryption interrupted.", e);
-            }
+        // Now wait for the future to complete
+        try {
+            return decryptionFuture.get(); // This will block, but since you're in a background thread, it's okay.
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt(); // Restore the interrupted status
+            throw new KeyCrypterException("Decryption was interrupted.", e);
+        } catch (ExecutionException e) {
+            throw new KeyCrypterException("Decryption failed.", e.getCause());
+        }
+    }
 
-            if (decryptedDataResult == null) {
-                throw new KeyCrypterException("Decryption failed or was canceled.");
-            }
-            return decryptedDataResult;
+    public byte[] doDecrypt(EncryptedData dataToDecrypt) throws UserNotAuthenticatedException {
+        try {
+            KeyStore keyStore = KeyStore.getInstance(KEY_STORE_PROVIDER);
+            keyStore.load(null);
+            SecretKey secretKey = (SecretKey) keyStore.getKey(KEY_STORE_KEY_REF, null);
+            Cipher cipher = Cipher.getInstance(KEY_STORE_TRANSFORMATION);
+            GCMParameterSpec spec = new GCMParameterSpec(TAG_LENGTH, dataToDecrypt.initialisationVector);
+            cipher.init(Cipher.DECRYPT_MODE, secretKey, spec);
+            return cipher.doFinal(dataToDecrypt.encryptedBytes);
+        } catch (UserNotAuthenticatedException e) {
+            throw new UserNotAuthenticatedException("User needs to authenticate");
+        }
+        catch (Exception e) {
+            log.info("Exception was " + e.getClass());
+            throw new KeyCrypterException("Could not encrypt bytes.", e);
         }
     }
 
@@ -190,29 +212,32 @@ public class KeyStoreKeyCrypter extends KeyCrypterScrypt {
      */
     @Override
     public EncryptedData encrypt(byte[] plainBytes, KeyParameter unusedAesKey) throws KeyCrypterException {
+        log.info("Starting KeyStoreKeyCrypter encrypt method");
+        try {
+            return doEncrypt(plainBytes);
+        } catch (UserNotAuthenticatedException e) {
+            // User must authenticate so catch exception and continue
+        }
+        catch (Exception e) {
+            log.info("Exception was" + e.getClass());
+            throw new KeyCrypterException("Could not encrypt bytes.", e);
+        }
+
+        // only reach code if user needs to authenticate
         encryptionFuture = new CompletableFuture<>();
-
-        // Initialize your Cipher and BiometricPrompt as you have it
-        // Assuming you already have a method that sets up and returns a BiometricPrompt object
-        encryptBiometricPrompt = createBiometricPrompt(encryptLock, true);
-
-        this.currentPlainBytes = plainBytes; // Assuming you need to use these bytes in your biometric callback
+        this.currentPlainBytes = plainBytes;
 
         // Move to the UI thread to call authenticate
+        log.info("got right in front of encrypt new Handler call");
         new Handler(Looper.getMainLooper()).post(() -> {
-            Cipher cipher;
+            log.info("Is Main Thread: " + (Looper.myLooper() == Looper.getMainLooper()));
             try {
-                KeyStore keyStore = KeyStore.getInstance(KEY_STORE_PROVIDER);
-                keyStore.load(null);
-                SecretKey secretKey = (SecretKey) keyStore.getKey(KEY_STORE_KEY_REF, null);
-                cipher = Cipher.getInstance(KEY_STORE_TRANSFORMATION);
-                cipher.init(Cipher.ENCRYPT_MODE, secretKey);
-                encryptBiometricPrompt.authenticate(promptInfo, new BiometricPrompt.CryptoObject(cipher));
+                BiometricPrompt encryptBiometricPrompt = createBiometricPrompt(true);
+                encryptBiometricPrompt.authenticate(promptInfo);
             } catch (Exception e) {
                 encryptionFuture.completeExceptionally(new KeyCrypterException("Failed to initialize encryption", e));
             }
         });
-        //encryptBiometricPrompt.authenticate(promptInfo, new BiometricPrompt.CryptoObject(cipher)); // ensure cipher is initialized
 
         // Now wait for the future to complete
         try {
@@ -222,6 +247,26 @@ public class KeyStoreKeyCrypter extends KeyCrypterScrypt {
             throw new KeyCrypterException("Encryption was interrupted.", e);
         } catch (ExecutionException e) {
             throw new KeyCrypterException("Encryption failed.", e.getCause());
+        }
+    }
+
+    private EncryptedData doEncrypt(byte[] plainBytes) throws UserNotAuthenticatedException {
+        Cipher cipher;
+        try {
+            KeyStore keyStore = KeyStore.getInstance(KEY_STORE_PROVIDER);
+            keyStore.load(null);
+            SecretKey secretKey = (SecretKey) keyStore.getKey(KEY_STORE_KEY_REF, null);
+            cipher = Cipher.getInstance(KEY_STORE_TRANSFORMATION);
+            cipher.init(Cipher.ENCRYPT_MODE, secretKey);
+            byte[] encryptedText = cipher.doFinal(plainBytes);
+            return new EncryptedData(cipher.getIV(), encryptedText);
+        } catch (UserNotAuthenticatedException e) {
+            // User must authenticate
+            throw new UserNotAuthenticatedException("User must authenticate");
+        }
+        catch (Exception e) {
+            log.info("Exception was" + e.getClass());
+            throw new KeyCrypterException("Could not encrypt bytes.", e);
         }
     }
 
@@ -253,7 +298,7 @@ public class KeyStoreKeyCrypter extends KeyCrypterScrypt {
         return promptInfo;
     }
 
-    private BiometricPrompt createBiometricPrompt(final Object lock, boolean isEncrypt) {
+    private BiometricPrompt createBiometricPrompt(boolean isEncrypt) {
         Executor executor = Executors.newSingleThreadExecutor();
         BiometricPrompt.AuthenticationCallback callback = new BiometricPrompt.AuthenticationCallback() {
             @Override
@@ -267,16 +312,24 @@ public class KeyStoreKeyCrypter extends KeyCrypterScrypt {
             }
 
             @Override
+            public void onAuthenticationFailed() {
+                super.onAuthenticationFailed();
+                if (isEncrypt) {
+                    encryptionFuture.completeExceptionally(new KeyCrypterException("Biometric authentication failed."));
+                } else {
+                    decryptionFuture.completeExceptionally(new KeyCrypterException("Biometric authentication failed."));
+                }
+            }
+
+            @Override
             public void onAuthenticationSucceeded(BiometricPrompt.AuthenticationResult result) {
                 super.onAuthenticationSucceeded(result);
                 try {
-                    Cipher cipher = result.getCryptoObject().getCipher();
                     if (isEncrypt) {
-                        byte[] encryptedData = cipher.doFinal(currentPlainBytes);
-                        EncryptedData encryptedDataResult = new EncryptedData(cipher.getIV(), encryptedData);
+                        EncryptedData encryptedDataResult = doEncrypt(currentPlainBytes);
                         encryptionFuture.complete(encryptedDataResult);
                     } else {
-                        byte[] decryptedData = cipher.doFinal(currentEncryptedData.encryptedBytes);
+                        byte[] decryptedData = doDecrypt(currentEncryptedData);
                         decryptionFuture.complete(decryptedData);
                     }
                 } catch (Exception e) {

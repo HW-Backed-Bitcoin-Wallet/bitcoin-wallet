@@ -383,10 +383,8 @@ public class EncryptKeysDialogFragment extends DialogFragment {
                     } catch (KeyCrypterException e) {
                         handler.post(() -> {
                             new AlertDialog.Builder(activity)
-                                    .setTitle("Unsupported android version")
-                                    .setMessage("This android version does not support the " +
-                                            "required strong biometric authentication " +
-                                            "(fingerprint, iris, or face)")
+                                    .setTitle("KeyCrypterException")
+                                    .setMessage("caught KeyCrypterException)")
                                     .setPositiveButton(android.R.string.ok, (dialog, which) -> {
                                         state = State.INPUT;
                                         updateView();
