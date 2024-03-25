@@ -1,17 +1,17 @@
 package de.schildbach.wallet.crypto;
 
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.pm.PackageManager;
 import android.os.Build;
+import android.os.CancellationSignal;
 import android.os.Handler;
 import android.os.Looper;
 import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
 import android.security.keystore.UserNotAuthenticatedException;
-
-import com.google.common.base.Stopwatch;
-import com.google.common.util.concurrent.SettableFuture;
-import com.google.protobuf.ByteString;
+import android.hardware.biometrics.BiometricPrompt;
+import org.bitcoinj.wallet.Protos.ScryptParameters;
 
 import org.bitcoinj.crypto.EncryptedData;
 import org.bitcoinj.crypto.KeyCrypterException;
@@ -48,8 +48,9 @@ import static de.schildbach.wallet.Constants.KEY_STORE_TRANSFORMATION;
 
 import androidx.annotation.AnyThread;
 import androidx.annotation.RequiresApi;
-import androidx.biometric.BiometricPrompt;
 import androidx.fragment.app.FragmentActivity;
+
+import com.google.protobuf.ByteString;
 
 public class KeyStoreKeyCrypter extends KeyCrypterScrypt {
 
@@ -58,16 +59,19 @@ public class KeyStoreKeyCrypter extends KeyCrypterScrypt {
     private static final int KEY_LENGTH = 256; // bits
     private static final int KEY_AUTHENTICATION_DURATION = 15; // seconds
     private final Context context;
-    private BiometricPrompt.PromptInfo promptInfo;
+
     private CompletableFuture<EncryptedData> encryptionFuture;
     private CompletableFuture<byte[]> decryptionFuture;
     private byte[] currentPlainBytes;
     private EncryptedData currentEncryptedData;
+    private final Protos.ScryptParameters scryptParameters;
 
     public KeyStoreKeyCrypter(Context context) {
         this.context = context;
-        promptInfo = createPromptInfo();
-
+        byte[] bytes = "KeyStoreKeyCrypter".getBytes();
+        Protos.ScryptParameters.Builder scryptParametersBuilder = Protos.ScryptParameters.newBuilder().setSalt(
+                ByteString.copyFrom(bytes));
+        this.scryptParameters = scryptParametersBuilder.build();
     }
 
     /**
@@ -99,7 +103,7 @@ public class KeyStoreKeyCrypter extends KeyCrypterScrypt {
                                     .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
                                     .setUserAuthenticationRequired(true)
                                     .setInvalidatedByBiometricEnrollment(true)
-                                    .setUserAuthenticationParameters(KEY_AUTHENTICATION_DURATION, KeyProperties.AUTH_BIOMETRIC_STRONG) // in case of multiple actions?
+                                    .setUserAuthenticationParameters(5, KeyProperties.AUTH_BIOMETRIC_STRONG) // in case of multiple actions?
                                     .setIsStrongBoxBacked(true)
                                     .build();
                         } else {
@@ -132,7 +136,7 @@ public class KeyStoreKeyCrypter extends KeyCrypterScrypt {
         }
 
         // Unused return
-        return new KeyParameter(new byte[BLOCK_LENGTH]);
+        return new KeyParameter(new byte[0]);
     }
 
     /**
@@ -160,17 +164,23 @@ public class KeyStoreKeyCrypter extends KeyCrypterScrypt {
         decryptionFuture = new CompletableFuture<>();
         this.currentEncryptedData = dataToDecrypt;
 
+        Thread test = Looper.getMainLooper().getThread();
+        log.info("Crypter", "Dec main thread is: " + test.getName());
+
+
+
         // Move to the UI thread to call authenticate
         log.info("got right in front of decrypt new Handler call");
         new Handler(Looper.getMainLooper()).post(() -> {
             log.info("Is Main Thread: " + (Looper.myLooper() == Looper.getMainLooper()));
             try {
-                BiometricPrompt decryptBiometricPrompt = createBiometricPrompt(false);
-                decryptBiometricPrompt.authenticate(promptInfo);
+                createBiometricPrompt(false);
             } catch (Exception e) {
                 decryptionFuture.completeExceptionally(new KeyCrypterException("Failed to initialize encryption", e));
             }
         });
+
+
 
         // Now wait for the future to complete
         try {
@@ -228,16 +238,15 @@ public class KeyStoreKeyCrypter extends KeyCrypterScrypt {
         this.currentPlainBytes = plainBytes;
 
         // Move to the UI thread to call authenticate
-        log.info("got right in front of encrypt new Handler call");
         new Handler(Looper.getMainLooper()).post(() -> {
             log.info("Is Main Thread: " + (Looper.myLooper() == Looper.getMainLooper()));
             try {
-                BiometricPrompt encryptBiometricPrompt = createBiometricPrompt(true);
-                encryptBiometricPrompt.authenticate(promptInfo);
+                createBiometricPrompt(true);
             } catch (Exception e) {
                 encryptionFuture.completeExceptionally(new KeyCrypterException("Failed to initialize encryption", e));
             }
         });
+
 
         // Now wait for the future to complete
         try {
@@ -283,66 +292,87 @@ public class KeyStoreKeyCrypter extends KeyCrypterScrypt {
         return EncryptionType.ENCRYPTED_SCRYPT_AES;
     }
 
-    private BiometricPrompt.PromptInfo createPromptInfo() {
-        BiometricPrompt.PromptInfo.Builder promptInfoBuilder = new BiometricPrompt.PromptInfo.Builder()
-                // e.g. "Sign in"
-                .setTitle("Test Title")
-                // e.g. "Biometric for My App"
-                .setSubtitle("Test Subtitle")
-                // e.g. "Confirm biometric to continue"
-                .setDescription("Test Description")
-                .setConfirmationRequired(false)
-                .setNegativeButtonText("Test Negative Button");
-
-        BiometricPrompt.PromptInfo promptInfo = promptInfoBuilder.build();
-        return promptInfo;
+    private CancellationSignal getCancellationSignal() {
+        CancellationSignal cancellationSignal = new CancellationSignal();
+        cancellationSignal.setOnCancelListener(new CancellationSignal.OnCancelListener() {
+            @Override
+            public void onCancel() {
+                log.info("Cancelled via signal");
+            }
+        });
+        return cancellationSignal;
     }
 
-    private BiometricPrompt createBiometricPrompt(boolean isEncrypt) {
+    private void createBiometricPrompt(boolean isEncrypt) {
         Executor executor = Executors.newSingleThreadExecutor();
-        BiometricPrompt.AuthenticationCallback callback = new BiometricPrompt.AuthenticationCallback() {
-            @Override
-            public void onAuthenticationError(int errorCode, CharSequence errString) {
-                super.onAuthenticationError(errorCode, errString);
-                if (isEncrypt) {
-                    encryptionFuture.completeExceptionally(new KeyCrypterException("Biometric authentication error: " + errString));
-                } else {
-                    decryptionFuture.completeExceptionally(new KeyCrypterException("Biometric authentication error: " + errString));
-                }
-            }
-
-            @Override
-            public void onAuthenticationFailed() {
-                super.onAuthenticationFailed();
-                if (isEncrypt) {
-                    encryptionFuture.completeExceptionally(new KeyCrypterException("Biometric authentication failed."));
-                } else {
-                    decryptionFuture.completeExceptionally(new KeyCrypterException("Biometric authentication failed."));
-                }
-            }
-
-            @Override
-            public void onAuthenticationSucceeded(BiometricPrompt.AuthenticationResult result) {
-                super.onAuthenticationSucceeded(result);
-                try {
+        BiometricPrompt.AuthenticationCallback callback = null;
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            callback = new BiometricPrompt.AuthenticationCallback() {
+                @Override
+                public void onAuthenticationError(int errorCode, CharSequence errString) {
+                    super.onAuthenticationError(errorCode, errString);
                     if (isEncrypt) {
-                        EncryptedData encryptedDataResult = doEncrypt(currentPlainBytes);
-                        encryptionFuture.complete(encryptedDataResult);
+                        encryptionFuture.completeExceptionally(new KeyCrypterException("Biometric authentication error: " + errString));
                     } else {
-                        byte[] decryptedData = doDecrypt(currentEncryptedData);
-                        decryptionFuture.complete(decryptedData);
-                    }
-                } catch (Exception e) {
-                    if (isEncrypt) {
-                        encryptionFuture.completeExceptionally(e);
-                    } else {
-                        decryptionFuture.completeExceptionally(e);
+                        decryptionFuture.completeExceptionally(new KeyCrypterException("Biometric authentication error: " + errString));
                     }
                 }
-            }
-        };
 
-        return new BiometricPrompt((FragmentActivity) context, executor, callback);
+                @Override
+                public void onAuthenticationFailed() {
+                    super.onAuthenticationFailed();
+                    if (isEncrypt) {
+                        encryptionFuture.completeExceptionally(new KeyCrypterException("Biometric authentication failed."));
+                    } else {
+                        decryptionFuture.completeExceptionally(new KeyCrypterException("Biometric authentication failed."));
+                    }
+                }
+
+                @Override
+                public void onAuthenticationSucceeded(BiometricPrompt.AuthenticationResult result) {
+                    super.onAuthenticationSucceeded(result);
+                    try {
+                        if (isEncrypt) {
+                            EncryptedData encryptedDataResult = doEncrypt(currentPlainBytes);
+                            encryptionFuture.complete(encryptedDataResult);
+                        } else {
+                            byte[] decryptedData = doDecrypt(currentEncryptedData);
+                            decryptionFuture.complete(decryptedData);
+                        }
+                    } catch (Exception e) {
+                        if (isEncrypt) {
+                            encryptionFuture.completeExceptionally(e);
+                        } else {
+                            decryptionFuture.completeExceptionally(e);
+                        }
+                    }
+                }
+            };
+        }
+
+        CancellationSignal cancellationSignal = new CancellationSignal();
+        cancellationSignal.setOnCancelListener(new CancellationSignal.OnCancelListener() {
+            @Override
+            public void onCancel() {
+                log.info("Cancelled via signal");
+            }
+        });
+
+
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            BiometricPrompt biometricPrompt = new BiometricPrompt.Builder(context)
+                    .setTitle("Biometric Fingerprint Authentication")
+                    .setSubtitle("Authentication is required to continue")
+                    .setDescription("This app uses biometric authentication to protect your data.")
+                    .setNegativeButton("Cancel", context.getMainExecutor(),
+                            new DialogInterface.OnClickListener() {
+                                @Override
+                                public void onClick(DialogInterface dialogInterface, int i) {
+                                    log.info("Authentication cancelled");
+                                }
+                            })
+                    .build();
+            biometricPrompt.authenticate(getCancellationSignal(), executor, callback);
+        }
     }
-
 }

@@ -17,6 +17,7 @@
 
 package de.schildbach.wallet.ui;
 
+import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.Dialog;
 import android.content.Context;
@@ -60,10 +61,6 @@ import org.bitcoinj.wallet.Wallet;
 import org.bouncycastle.crypto.params.KeyParameter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.security.InvalidAlgorithmParameterException;
-import java.security.NoSuchAlgorithmException;
-import java.security.NoSuchProviderException;
 
 /**
  * @author Andreas Schildbach
@@ -136,6 +133,7 @@ public class EncryptKeysDialogFragment extends DialogFragment {
         this.wallet = application.getWallet();
     }
     private ActivityResultLauncher<Intent> biometricEnrollmentResultLauncher;
+    private ActivityResultLauncher<Intent> startCrypt;
 
     @Override
     public void onCreate(final Bundle savedInstanceState) {
@@ -153,6 +151,21 @@ public class EncryptKeysDialogFragment extends DialogFragment {
                     // Handle the result of the biometric enrollment here
                     updateView();
                 });
+        startCrypt = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
+            // Handle the result of the biometric enrollment here
+            if (result.getResultCode() == Activity.RESULT_OK) {
+                state = State.DONE;
+                updateView();
+                WalletUtils.autoBackupWallet(activity, wallet);
+                // trigger load manually because of missing callbacks for encryption state
+                activityViewModel.walletEncrypted.load();
+                handler.postDelayed(() -> dismiss(), 2000);
+
+            } else if (result.getResultCode() == Activity.RESULT_CANCELED) {
+                state = State.INPUT;
+                updateView();
+            }
+        });
     }
 
     @Override
@@ -348,52 +361,7 @@ public class EncryptKeysDialogFragment extends DialogFragment {
                     handler.post(() -> {
                         updateView();
                     });
-                    try {
-                        final KeyStoreKeyCrypter keyCrypter = new KeyStoreKeyCrypter(activity);
-                        final KeyParameter newKey = wallet.isEncrypted() != true ? keyCrypter.deriveKey(null) : null;
-
-                        // Decrypt wallet
-                        if (wallet.isEncrypted()) {
-                            wallet.decrypt("1"); // Password is not needed but required by the KeyCrypter interface
-                            state = State.DONE;
-                            log.info("wallet successfully decrypted");
-                        }
-                        // Use opportunity to maybe upgrade wallet
-                        if (wallet.isDeterministicUpgradeRequired(Constants.UPGRADE_OUTPUT_SCRIPT_TYPE)
-                                && !wallet.isEncrypted())
-                            wallet.upgradeToDeterministic(Constants.UPGRADE_OUTPUT_SCRIPT_TYPE, null);
-
-                        // Encrypt with new key in the KeyStore
-                        if (newKey != null && !wallet.isEncrypted()) {
-                            wallet.encrypt(keyCrypter, newKey);
-                            config.updateLastEncryptKeysTime();
-                            log.info("wallet successfully encrypted, using Android KeyStore");
-                            state = State.DONE;
-                        }
-                        handler.post(() -> {
-                            updateView();
-                        });
-
-                        if (state == State.DONE) {
-                            WalletUtils.autoBackupWallet(activity, wallet);
-                            // trigger load manually because of missing callbacks for encryption state
-                            activityViewModel.walletEncrypted.load();
-                            handler.postDelayed(() -> dismiss(), 2000);
-                        }
-                    } catch (KeyCrypterException e) {
-                        handler.post(() -> {
-                            new AlertDialog.Builder(activity)
-                                    .setTitle("KeyCrypterException")
-                                    .setMessage("caught KeyCrypterException)")
-                                    .setPositiveButton(android.R.string.ok, (dialog, which) -> {
-                                        state = State.INPUT;
-                                        updateView();
-                                    })
-                                    .setIcon(android.R.drawable.ic_dialog_alert)
-                                    .show();
-                        });
-                        break;
-                    }
+                    startCrypt.launch(new Intent(getContext(),de.schildbach.wallet.ui.CryptActivity.class));
                     break;
                 case BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE:
                     handler.post(() -> {

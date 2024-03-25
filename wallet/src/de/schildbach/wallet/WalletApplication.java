@@ -42,6 +42,8 @@ import com.google.common.hash.HashCode;
 import com.google.common.hash.Hasher;
 import com.google.common.hash.Hashing;
 import com.google.common.util.concurrent.SettableFuture;
+import com.google.protobuf.ByteString;
+
 import de.schildbach.wallet.service.BlockchainService;
 import de.schildbach.wallet.service.BlockchainState;
 import de.schildbach.wallet.ui.Event;
@@ -50,9 +52,12 @@ import de.schildbach.wallet.util.CrashReporter;
 import de.schildbach.wallet.util.Toast;
 import de.schildbach.wallet.util.WalletUtils;
 import org.bitcoinj.core.VersionMessage;
+import org.bitcoinj.crypto.KeyCrypterScrypt;
 import org.bitcoinj.crypto.MnemonicCode;
 import org.bitcoinj.utils.ContextPropagatingThreadFactory;
 import org.bitcoinj.utils.Threading;
+import org.bitcoinj.wallet.DeterministicSeed;
+import org.bitcoinj.wallet.Protos;
 import org.bitcoinj.wallet.UnreadableWalletException;
 import org.bitcoinj.wallet.Wallet;
 import org.bitcoinj.wallet.WalletFiles;
@@ -162,14 +167,19 @@ public class WalletApplication extends Application {
             public void run() {
                 synchronized (getWalletLock) {
                     initMnemonicCode();
-                    if (walletFiles == null)
-                        loadWalletFromProtobuf();
+                    if (walletFiles == null) {
+                        try {
+                            loadWalletFromProtobuf();
+                        } catch (UnreadableWalletException e) {
+                            throw new RuntimeException(e);
+                        }
+                    }
                 }
                 listener.onWalletLoaded(walletFiles.getWallet());
             }
 
             @WorkerThread
-            private void loadWalletFromProtobuf() {
+            private void loadWalletFromProtobuf() throws UnreadableWalletException {
                 Wallet wallet;
                 if (walletFile.exists()) {
                     try (final FileInputStream walletStream = new FileInputStream(walletFile)) {
@@ -203,6 +213,10 @@ public class WalletApplication extends Application {
                             TimeUnit.MILLISECONDS, null);
                 } else {
                     final Stopwatch watch = Stopwatch.createStarted();
+                    /*DeterministicSeed seed = new DeterministicSeed(
+                            "dress girl cool artist dinosaur abstract adult agree puzzle torch domain present",
+                            null, "", 0);
+                    wallet = Wallet.fromSeed(Constants.NETWORK_PARAMETERS, seed, Constants.DEFAULT_OUTPUT_SCRIPT_TYPE);*/
                     wallet = Wallet.createDeterministic(Constants.NETWORK_PARAMETERS,
                             Constants.DEFAULT_OUTPUT_SCRIPT_TYPE);
                     walletFiles = wallet.autosaveToFile(walletFile, Constants.Files.WALLET_AUTOSAVE_DELAY_MS,
@@ -211,7 +225,6 @@ public class WalletApplication extends Application {
                     WalletUtils.autoBackupWallet(WalletApplication.this, wallet); // ...and backup asap
                     watch.stop();
                     log.info("fresh {} wallet created, took {}", Constants.DEFAULT_OUTPUT_SCRIPT_TYPE, watch);
-
                     config.armBackupReminder();
                 }
             }
