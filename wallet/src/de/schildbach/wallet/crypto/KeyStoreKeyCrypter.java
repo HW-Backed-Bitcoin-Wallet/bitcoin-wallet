@@ -1,3 +1,4 @@
+
 package de.schildbach.wallet.crypto;
 
 import android.content.Context;
