@@ -44,6 +44,7 @@ import com.google.common.hash.Hashing;
 import com.google.common.util.concurrent.SettableFuture;
 import com.google.protobuf.ByteString;
 
+import de.schildbach.wallet.crypto.KeyStoreKeyCrypterFactory;
 import de.schildbach.wallet.service.BlockchainService;
 import de.schildbach.wallet.service.BlockchainState;
 import de.schildbach.wallet.ui.Event;
@@ -52,12 +53,13 @@ import de.schildbach.wallet.util.CrashReporter;
 import de.schildbach.wallet.util.Toast;
 import de.schildbach.wallet.util.WalletUtils;
 import org.bitcoinj.core.VersionMessage;
+import org.bitcoinj.crypto.KeyCrypterFactory;
 import org.bitcoinj.crypto.KeyCrypterScrypt;
 import org.bitcoinj.crypto.MnemonicCode;
 import org.bitcoinj.utils.ContextPropagatingThreadFactory;
 import org.bitcoinj.utils.Threading;
 import org.bitcoinj.wallet.DeterministicSeed;
-import org.bitcoinj.wallet.Protos;
+import org.bitcoinj.protobuf.wallet.Protos;
 import org.bitcoinj.wallet.UnreadableWalletException;
 import org.bitcoinj.wallet.Wallet;
 import org.bitcoinj.wallet.WalletFiles;
@@ -185,7 +187,10 @@ public class WalletApplication extends Application {
                 if (walletFile.exists()) {
                     try (final FileInputStream walletStream = new FileInputStream(walletFile)) {
                         final Stopwatch watch = Stopwatch.createStarted();
-                        wallet = new WalletProtobufSerializer().readWallet(walletStream);
+                        KeyCrypterFactory keyCrypterFactory = new KeyStoreKeyCrypterFactory(WalletApplication.this);
+                        WalletProtobufSerializer serializer = new WalletProtobufSerializer();
+                        serializer.setKeyCrypterFactory(keyCrypterFactory);
+                        wallet = serializer.readWallet(walletStream);
                         watch.stop();
 
                         if (!wallet.network().equals(Constants.NETWORK_PARAMETERS.network()))

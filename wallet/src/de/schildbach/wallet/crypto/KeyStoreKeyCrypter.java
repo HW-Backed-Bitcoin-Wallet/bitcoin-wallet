@@ -12,15 +12,15 @@ import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
 import android.security.keystore.UserNotAuthenticatedException;
 import android.hardware.biometrics.BiometricPrompt;
-import org.bitcoinj.wallet.Protos.ScryptParameters;
+
+import org.bitcoinj.crypto.AesKey;
+import org.bitcoinj.protobuf.wallet.Protos;
+import org.bitcoinj.protobuf.wallet.Protos.ScryptParameters;
+import org.bitcoinj.protobuf.wallet.Protos.Wallet.EncryptionType;
 
 import org.bitcoinj.crypto.EncryptedData;
 import org.bitcoinj.crypto.KeyCrypterException;
 import org.bitcoinj.crypto.KeyCrypterScrypt;
-import org.bitcoinj.utils.ContextPropagatingThreadFactory;
-import org.bitcoinj.wallet.Protos;
-import org.bitcoinj.wallet.Protos.Wallet.EncryptionType;
-import org.bouncycastle.crypto.params.KeyParameter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -47,9 +47,7 @@ import static de.schildbach.wallet.Constants.KEY_STORE_KEY_REF;
 import static de.schildbach.wallet.Constants.KEY_STORE_PROVIDER;
 import static de.schildbach.wallet.Constants.KEY_STORE_TRANSFORMATION;
 
-import androidx.annotation.AnyThread;
 import androidx.annotation.RequiresApi;
-import androidx.fragment.app.FragmentActivity;
 
 import com.google.protobuf.ByteString;
 
@@ -65,12 +63,12 @@ public class KeyStoreKeyCrypter extends KeyCrypterScrypt {
     private CompletableFuture<byte[]> decryptionFuture;
     private byte[] currentPlainBytes;
     private EncryptedData currentEncryptedData;
-    private final Protos.ScryptParameters scryptParameters;
+    private final ScryptParameters scryptParameters;
 
     public KeyStoreKeyCrypter(Context context) {
         this.context = context;
         byte[] bytes = "KeyStoreKeyCrypter".getBytes();
-        Protos.ScryptParameters.Builder scryptParametersBuilder = Protos.ScryptParameters.newBuilder().setSalt(
+        ScryptParameters.Builder scryptParametersBuilder = Protos.ScryptParameters.newBuilder().setSalt(
                 ByteString.copyFrom(bytes));
         this.scryptParameters = scryptParametersBuilder.build();
     }
@@ -83,7 +81,7 @@ public class KeyStoreKeyCrypter extends KeyCrypterScrypt {
      */
     @RequiresApi(api = Build.VERSION_CODES.R)
     @Override
-    public KeyParameter deriveKey(CharSequence unusedPassword) throws KeyCrypterException {
+    public AesKey deriveKey(CharSequence unusedPassword) throws KeyCrypterException {
         KeyStore keyStore;
         try {
             log.info("Available KeyStore providers: {}", Arrays.toString(Security.getProviders()));
@@ -137,7 +135,7 @@ public class KeyStoreKeyCrypter extends KeyCrypterScrypt {
         }
 
         // Unused return
-        return new KeyParameter(new byte[0]);
+        return new AesKey(new byte[0]);
     }
 
     /**
@@ -149,7 +147,7 @@ public class KeyStoreKeyCrypter extends KeyCrypterScrypt {
      * @throws                          KeyCrypterException if bytes could not be decrypted
      */
     @Override
-    public byte[] decrypt(EncryptedData dataToDecrypt, KeyParameter unusedAesKey) throws KeyCrypterException {
+    public byte[] decrypt(EncryptedData dataToDecrypt, AesKey unusedAesKey) throws KeyCrypterException {
         log.info("Starting KeyStoreKeyCrypter decrypt method");
         try {
             return doDecrypt(dataToDecrypt);
@@ -222,7 +220,7 @@ public class KeyStoreKeyCrypter extends KeyCrypterScrypt {
      * @throws              KeyCrypterException if bytes could not be decrypted
      */
     @Override
-    public EncryptedData encrypt(byte[] plainBytes, KeyParameter unusedAesKey) throws KeyCrypterException {
+    public EncryptedData encrypt(byte[] plainBytes, AesKey unusedAesKey) throws KeyCrypterException {
         log.info("Starting KeyStoreKeyCrypter encrypt method");
         try {
             return doEncrypt(plainBytes);

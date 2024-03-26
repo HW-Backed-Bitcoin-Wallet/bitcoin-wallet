@@ -42,48 +42,19 @@ ext {
 }
 
 android {
-<<<<<<< HEAD
-<<<<<<< HEAD
     compileSdkVersion 'android-34'
-=======
-    compileSdkVersion 34
->>>>>>> da2db0c9 (wip)
-=======
-    compileSdkVersion 'android-34'
->>>>>>> 99f1cc89 (build and app execution with bitcoin 0.17)
     buildToolsVersion '30.0.3'
 
     defaultConfig {
         applicationId 'de.schildbach'
-<<<<<<< HEAD
-<<<<<<< HEAD
         minSdkVersion 28
-=======
-        dexOptions {
-            preDexLibraries false
-        }
-=======
->>>>>>> 99f1cc89 (build and app execution with bitcoin 0.17)
-        minSdkVersion 26
->>>>>>> da2db0c9 (wip)
     }
 
     buildTypes {
         all {
-<<<<<<< HEAD
-<<<<<<< HEAD
             minifyEnabled false
             shrinkResources false
             crunchPngs false
-=======
-            minifyEnabled true
-            shrinkResources false
->>>>>>> da2db0c9 (wip)
-=======
-            minifyEnabled false
-            shrinkResources false
-            crunchPngs false
->>>>>>> 99f1cc89 (build and app execution with bitcoin 0.17)
             proguardFile 'proguard.cfg'
         }
         debug {

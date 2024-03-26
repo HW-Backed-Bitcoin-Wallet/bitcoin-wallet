@@ -11,6 +11,7 @@ import android.view.View;
 import android.widget.Button;
 
 
+import org.bitcoinj.crypto.AesKey;
 import org.bitcoinj.crypto.KeyCrypterException;
 import org.bitcoinj.wallet.Wallet;
 import org.bouncycastle.crypto.params.KeyParameter;
@@ -73,7 +74,7 @@ public class CryptActivity extends Activity {
     protected void doCrypto() {
         try {
             final KeyStoreKeyCrypter keyCrypter = new KeyStoreKeyCrypter(getApplicationContext());
-            final KeyParameter newKey = wallet.isEncrypted() != true ? keyCrypter.deriveKey(null) : null;
+            final AesKey newKey = wallet.isEncrypted() != true ? keyCrypter.deriveKey(null) : null;
 
             // Decrypt wallet
             if (wallet.isEncrypted()) {
