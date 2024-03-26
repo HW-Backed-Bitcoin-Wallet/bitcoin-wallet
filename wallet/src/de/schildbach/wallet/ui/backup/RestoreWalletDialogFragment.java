@@ -274,6 +274,9 @@ public class RestoreWalletDialogFragment extends DialogFragment {
             if (showEncryptedMessage) {
                 message.append("\n\n");
                 message.append(getString(R.string.restore_wallet_dialog_success_encrypted));
+            } else {
+                message.append("\n\n");
+                message.append("Warning: Your wallet is currently unencrypted. You can encrypt your wallet under Settings > Safety > Wallet protection");
             }
             final DialogBuilder dialog = DialogBuilder.dialog(activity, 0, message);
             dialog.setNeutralButton(R.string.button_ok, (dialog1, id) -> {

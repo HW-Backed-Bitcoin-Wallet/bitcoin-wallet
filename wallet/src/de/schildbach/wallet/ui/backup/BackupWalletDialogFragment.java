@@ -44,6 +44,7 @@ import com.google.common.io.CharStreams;
 import de.schildbach.wallet.Constants;
 import de.schildbach.wallet.R;
 import de.schildbach.wallet.WalletApplication;
+import de.schildbach.wallet.crypto.KeyStoreKeyCrypter;
 import de.schildbach.wallet.ui.AbstractWalletActivity;
 import de.schildbach.wallet.ui.AbstractWalletActivityViewModel;
 import de.schildbach.wallet.ui.DialogBuilder;
@@ -113,6 +114,10 @@ public class BackupWalletDialogFragment extends DialogFragment {
                                     checkState(!password.isEmpty());
                                     wipePasswords();
                                     dismiss();
+
+                                    if (wallet.getKeyCrypter() instanceof KeyStoreKeyCrypter) {
+                                        wallet.decrypt("unusedPassword");
+                                    }
 
                                     byte[] plainBytes = null;
                                     try (final Writer cipherOut = new OutputStreamWriter(
