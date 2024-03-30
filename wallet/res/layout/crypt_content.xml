@@ -8,16 +8,8 @@
         android:id="@+id/crypt_instruction_text"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Press the button below to start the encryption/decryption process."
+        android:text="Fingerprint scanner"
         android:layout_centerHorizontal="true"
-        android:layout_marginBottom="24dp"
-        android:layout_above="@id/crypt_button" />
-
-    <Button
-        android:id="@+id/crypt_button"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Start"
-        android:layout_centerInParent="true" />
+        android:layout_marginBottom="24dp"/>
 
 </RelativeLayout>

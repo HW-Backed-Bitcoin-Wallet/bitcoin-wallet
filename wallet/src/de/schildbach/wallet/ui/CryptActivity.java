@@ -2,20 +2,13 @@ package de.schildbach.wallet.ui;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
-import android.app.AlertDialog;
-import android.hardware.biometrics.BiometricManager;
 import android.os.Bundle;
-import android.os.Handler;
 import android.view.MenuItem;
-import android.view.View;
-import android.widget.Button;
 
 
 import org.bitcoinj.core.Context;
 import org.bitcoinj.crypto.AesKey;
-import org.bitcoinj.crypto.KeyCrypterException;
 import org.bitcoinj.wallet.Wallet;
-import org.bouncycastle.crypto.params.KeyParameter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -50,17 +43,13 @@ public class CryptActivity extends Activity {
         this.config = application.getConfiguration();
         final Context context = Context.get();
 
-
-        Button btn = (Button) findViewById(R.id.crypt_button);
-        btn.setOnClickListener(view -> {
-            Executor executor = Executors.newSingleThreadExecutor();
-            executor.execute(() -> {
-                Context.propagate(context);
-                doCrypto();
-                finish();
-            });
-
+        Executor executor = Executors.newSingleThreadExecutor();
+        executor.execute(() -> {
+            Context.propagate(context);
+            doCrypto();
+            finish();
         });
+
     }
 
     @Override

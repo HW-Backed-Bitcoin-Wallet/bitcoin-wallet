@@ -57,10 +57,8 @@ import de.schildbach.wallet.util.WalletUtils;
 
 import org.bitcoinj.crypto.AesKey;
 import org.bitcoinj.crypto.KeyCrypter;
-import org.bitcoinj.crypto.KeyCrypterException;
 import org.bitcoinj.crypto.KeyCrypterScrypt;
 import org.bitcoinj.wallet.Wallet;
-import org.bouncycastle.crypto.params.KeyParameter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -150,16 +148,13 @@ public class EncryptKeysDialogFragment extends DialogFragment {
 
         biometricEnrollmentResultLauncher =
                 registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
-                    // Handle the result of the biometric enrollment here
                     updateView();
                 });
         startCrypt = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
-            // Handle the result of the biometric enrollment here
             if (result.getResultCode() == Activity.RESULT_OK) {
                 state = State.DONE;
                 updateView();
                 WalletUtils.autoBackupWallet(activity, wallet);
-                // trigger load manually because of missing callbacks for encryption state
                 activityViewModel.walletEncrypted.load();
                 handler.postDelayed(() -> dismiss(), 2000);
 

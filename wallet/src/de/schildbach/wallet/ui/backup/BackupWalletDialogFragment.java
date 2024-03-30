@@ -23,6 +23,7 @@ import android.app.Dialog;
 import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.DialogInterface;
+import android.content.Intent;
 import android.graphics.Typeface;
 import android.os.Bundle;
 import android.text.Editable;
@@ -48,6 +49,7 @@ import de.schildbach.wallet.crypto.KeyStoreKeyCrypter;
 import de.schildbach.wallet.ui.AbstractWalletActivity;
 import de.schildbach.wallet.ui.AbstractWalletActivityViewModel;
 import de.schildbach.wallet.ui.DialogBuilder;
+import de.schildbach.wallet.ui.CryptActivity;
 import de.schildbach.wallet.ui.ShowPasswordCheckListener;
 import de.schildbach.wallet.util.Crypto;
 import de.schildbach.wallet.util.Toast;
@@ -65,11 +67,9 @@ import java.io.OutputStreamWriter;
 import java.io.Reader;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
-import java.text.DateFormat;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
-import java.util.Date;
 import java.util.TimeZone;
 
 import static com.google.common.base.Preconditions.checkState;
@@ -97,6 +97,7 @@ public class BackupWalletDialogFragment extends DialogFragment {
 
     private AbstractWalletActivityViewModel walletActivityViewModel;
     private BackupWalletViewModel viewModel;
+    private ActivityResultLauncher<Intent> startCrypt;
 
     private static final Logger log = LoggerFactory.getLogger(BackupWalletDialogFragment.class);
 
@@ -107,6 +108,15 @@ public class BackupWalletDialogFragment extends DialogFragment {
                             walletActivityViewModel.wallet.observe(this, new Observer<Wallet>() {
                                 @Override
                                 public void onChanged(final Wallet wallet) {
+
+                                    boolean keyCrypter;
+                                    if (wallet.getKeyCrypter() instanceof KeyStoreKeyCrypter) {
+                                        startCrypt.launch(new Intent(getContext(),CryptActivity.class));
+                                        keyCrypter = true;
+                                    } else {
+                                        keyCrypter = false;
+                                    }
+
                                     walletActivityViewModel.wallet.removeObserver(this);
 
                                     final String targetProvider = WalletUtils.uriToProvider(uri);
@@ -114,10 +124,6 @@ public class BackupWalletDialogFragment extends DialogFragment {
                                     checkState(!password.isEmpty());
                                     wipePasswords();
                                     dismiss();
-
-                                    if (wallet.getKeyCrypter() instanceof KeyStoreKeyCrypter) {
-                                        wallet.decrypt("unusedPassword");
-                                    }
 
                                     byte[] plainBytes = null;
                                     try (final Writer cipherOut = new OutputStreamWriter(
@@ -164,6 +170,9 @@ public class BackupWalletDialogFragment extends DialogFragment {
                                         ErrorDialogFragment.showDialog(getParentFragmentManager(), x.toString());
                                         return;
                                     }
+                                    if (keyCrypter) {
+                                        startCrypt.launch(new Intent(getContext(),CryptActivity.class));
+                                    }
                                 }
                             });
                         } else {
@@ -203,6 +212,10 @@ public class BackupWalletDialogFragment extends DialogFragment {
 
         walletActivityViewModel = new ViewModelProvider(activity).get(AbstractWalletActivityViewModel.class);
         viewModel = new ViewModelProvider(this).get(BackupWalletViewModel.class);
+
+        startCrypt = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
+            log.info("Successfully called CryptActivity {}", getClass().getName());
+        });
     }
 
     @Override
