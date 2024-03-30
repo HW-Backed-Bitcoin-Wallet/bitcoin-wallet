@@ -638,6 +638,8 @@ public final class SendCoinsFragment extends Fragment {
             return false;
         if (!wallet.isEncrypted() && !(wallet.getKeyCrypter() instanceof KeyStoreKeyCrypter))
             return true;
+        if (wallet.getKeyCrypter() instanceof KeyStoreKeyCrypter)
+            return true;
         return !privateKeyPasswordView.getText().toString().trim().isEmpty();
     }
 
