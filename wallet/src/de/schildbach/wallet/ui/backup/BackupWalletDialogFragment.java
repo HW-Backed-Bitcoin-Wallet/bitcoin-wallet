@@ -25,6 +25,7 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.graphics.Typeface;
+import android.net.Uri;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.Html;
@@ -35,6 +36,7 @@ import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.TextView;
+
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.fragment.app.DialogFragment;
@@ -98,80 +100,23 @@ public class BackupWalletDialogFragment extends DialogFragment {
     private AbstractWalletActivityViewModel walletActivityViewModel;
     private BackupWalletViewModel viewModel;
     private ActivityResultLauncher<Intent> startCrypt;
+    private Uri uri;
 
     private static final Logger log = LoggerFactory.getLogger(BackupWalletDialogFragment.class);
 
     private final ActivityResultLauncher<String> createDocumentLauncher =
             registerForActivityResult(new ActivityResultContracts.CreateDocument(Constants.MIMETYPE_WALLET_BACKUP),
                     uri -> {
+                        this.uri = uri;
                         if (uri != null) {
                             walletActivityViewModel.wallet.observe(this, new Observer<Wallet>() {
                                 @Override
                                 public void onChanged(final Wallet wallet) {
-
-                                    boolean keyCrypter;
+                                    walletActivityViewModel.wallet.removeObserver(this);
                                     if (wallet.getKeyCrypter() instanceof KeyStoreKeyCrypter) {
                                         startCrypt.launch(new Intent(getContext(),CryptActivity.class));
-                                        keyCrypter = true;
                                     } else {
-                                        keyCrypter = false;
-                                    }
-
-                                    walletActivityViewModel.wallet.removeObserver(this);
-
-                                    final String targetProvider = WalletUtils.uriToProvider(uri);
-                                    final String password = passwordView.getText().toString().trim();
-                                    checkState(!password.isEmpty());
-                                    wipePasswords();
-                                    dismiss();
-
-                                    byte[] plainBytes = null;
-                                    try (final Writer cipherOut = new OutputStreamWriter(
-                                            activity.getContentResolver().openOutputStream(uri),
-                                            StandardCharsets.UTF_8)) {
-                                        final Protos.Wallet walletProto =
-                                                new WalletProtobufSerializer().walletToProto(wallet);
-                                        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                                        walletProto.writeTo(baos);
-                                        baos.close();
-                                        plainBytes = baos.toByteArray();
-
-                                        final String cipherText = Crypto.encrypt(plainBytes, password.toCharArray());
-                                        cipherOut.write(cipherText);
-                                        cipherOut.flush();
-
-                                        log.info("backed up wallet to: '{}'{}, {} characters written", uri,
-                                                targetProvider != null ? " (" + targetProvider + ")" : "",
-                                                cipherText.length());
-                                    } catch (final IOException x) {
-                                        log.error("problem backing up wallet to " + uri, x);
-                                        ErrorDialogFragment.showDialog(getParentFragmentManager(), x.toString());
-                                        return;
-                                    }
-
-                                    try (final Reader cipherIn = new InputStreamReader(
-                                            activity.getContentResolver().openInputStream(uri),
-                                            StandardCharsets.UTF_8)) {
-                                        final StringBuilder cipherText = new StringBuilder();
-                                        CharStreams.copy(cipherIn, cipherText);
-                                        cipherIn.close();
-
-                                        final byte[] plainBytes2 = Crypto.decryptBytes(cipherText.toString(),
-                                                password.toCharArray());
-                                        if (!Arrays.equals(plainBytes, plainBytes2))
-                                            throw new IOException("verification failed");
-
-                                        log.info("verified successfully: '" + uri + "'");
-                                        application.getConfiguration().disarmBackupReminder();
-                                        SuccessDialogFragment.showDialog(getParentFragmentManager(),
-                                                targetProvider != null ? targetProvider : uri.toString());
-                                    } catch (final IOException x) {
-                                        log.error("problem verifying backup from " + uri, x);
-                                        ErrorDialogFragment.showDialog(getParentFragmentManager(), x.toString());
-                                        return;
-                                    }
-                                    if (keyCrypter) {
-                                        startCrypt.launch(new Intent(getContext(),CryptActivity.class));
+                                        saveBackup(uri, false);
                                     }
                                 }
                             });
@@ -215,6 +160,7 @@ public class BackupWalletDialogFragment extends DialogFragment {
 
         startCrypt = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
             log.info("Successfully called CryptActivity {}", getClass().getName());
+            saveBackup(uri, true);
         });
     }
 
@@ -345,6 +291,64 @@ public class BackupWalletDialogFragment extends DialogFragment {
         } catch (final ActivityNotFoundException x) {
             log.warn("Cannot open document selector: {}", filename);
             new Toast(activity).longToast(R.string.toast_start_storage_provider_selector_failed);
+        }
+    }
+
+    private void saveBackup(Uri uri, boolean isKeyCrypter) {
+
+        final String targetProvider = WalletUtils.uriToProvider(uri);
+        final String password = passwordView.getText().toString().trim();
+        checkState(!password.isEmpty());
+        wipePasswords();
+        dismiss();
+
+        byte[] plainBytes = null;
+        try (final Writer cipherOut = new OutputStreamWriter(
+                activity.getContentResolver().openOutputStream(uri),
+                StandardCharsets.UTF_8)) {
+            final Protos.Wallet walletProto =
+                    new WalletProtobufSerializer().walletToProto(application.getWallet());
+            final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            walletProto.writeTo(baos);
+            baos.close();
+            plainBytes = baos.toByteArray();
+
+            final String cipherText = Crypto.encrypt(plainBytes, password.toCharArray());
+            cipherOut.write(cipherText);
+            cipherOut.flush();
+
+            log.info("backed up wallet to: '{}'{}, {} characters written", uri,
+                    targetProvider != null ? " (" + targetProvider + ")" : "",
+                    cipherText.length());
+        } catch (final IOException x) {
+            log.error("problem backing up wallet to " + uri, x);
+            ErrorDialogFragment.showDialog(getParentFragmentManager(), x.toString());
+            return;
+        }
+
+        try (final Reader cipherIn = new InputStreamReader(
+                activity.getContentResolver().openInputStream(uri),
+                StandardCharsets.UTF_8)) {
+            final StringBuilder cipherText = new StringBuilder();
+            CharStreams.copy(cipherIn, cipherText);
+            cipherIn.close();
+
+            final byte[] plainBytes2 = Crypto.decryptBytes(cipherText.toString(),
+                    password.toCharArray());
+            if (!Arrays.equals(plainBytes, plainBytes2))
+                throw new IOException("verification failed");
+
+            log.info("verified successfully: '" + uri + "'");
+            application.getConfiguration().disarmBackupReminder();
+            SuccessDialogFragment.showDialog(getParentFragmentManager(),
+                    targetProvider != null ? targetProvider : uri.toString());
+        } catch (final IOException x) {
+            log.error("problem verifying backup from " + uri, x);
+            ErrorDialogFragment.showDialog(getParentFragmentManager(), x.toString());
+            return;
+        }
+        if (isKeyCrypter) {
+            startCrypt.launch(new Intent(getContext(),CryptActivity.class));
         }
     }
 

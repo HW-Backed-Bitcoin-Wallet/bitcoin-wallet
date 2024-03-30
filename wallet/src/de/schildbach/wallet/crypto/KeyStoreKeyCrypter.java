@@ -63,7 +63,7 @@ public class KeyStoreKeyCrypter extends KeyCrypterScrypt {
     private CompletableFuture<byte[]> decryptionFuture;
     private byte[] currentPlainBytes;
     private EncryptedData currentEncryptedData;
-    private final ScryptParameters scryptParameters;
+    private ScryptParameters scryptParameters;
 
     public KeyStoreKeyCrypter(Context context) {
         this.context = context;
@@ -183,7 +183,9 @@ public class KeyStoreKeyCrypter extends KeyCrypterScrypt {
 
         // Now wait for the future to complete
         try {
-            return decryptionFuture.get(); // This will block, but since you're in a background thread, it's okay.
+            byte[] decryptedBytes = decryptionFuture.get();
+            scryptParameters = null;
+            return decryptedBytes;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt(); // Restore the interrupted status
             throw new KeyCrypterException("Decryption was interrupted.", e);
