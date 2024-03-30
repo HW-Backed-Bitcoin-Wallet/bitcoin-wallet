@@ -353,7 +353,6 @@ public class EncryptKeysDialogFragment extends DialogFragment {
 
             switch (canAuthenticate) {
                 case BiometricManager.BIOMETRIC_SUCCESS:
-                    // Biometric is available and the user can authenticate using biometrics.
                     state = State.CRYPTING;
                     handler.post(() -> {
                         updateView();
@@ -361,96 +360,35 @@ public class EncryptKeysDialogFragment extends DialogFragment {
                     startCrypt.launch(new Intent(getContext(),de.schildbach.wallet.ui.CryptActivity.class));
                     break;
                 case BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE:
-                    handler.post(() -> {
-                        new AlertDialog.Builder(activity)
-                                .setTitle("No biometric hardware available")
-                                .setMessage("This device does not support biometric authentication. " +
-                                        "Please use Spending PIN instead of KeyStore encryption")
-                                .setPositiveButton(android.R.string.ok, (dialog, which) -> {
-                                    state = State.INPUT;
-                                    updateView();
-                                })
-                                .setIcon(android.R.drawable.ic_dialog_alert)
-                                .show();
-                    });
+                    showBiometricErrorDialog(getString(R.string.biometric_hardward_not_available),
+                            getString(R.string.biometric_hardward_not_available_info),
+                            null);
                     break;
                 case BiometricManager.BIOMETRIC_ERROR_HW_UNAVAILABLE:
-                    // Biometric features are currently unavailable.
-                    handler.post(() -> {
-                        new AlertDialog.Builder(activity)
-                                .setTitle("Biometric hardware is currently unavailable")
-                                .setMessage("Biometric hardware is currently unavailable")
-                                .setPositiveButton(android.R.string.ok, (dialog, which) -> {
-                                    state = State.INPUT;
-                                    updateView();
-                                })
-                                .setIcon(android.R.drawable.ic_dialog_alert)
-                                .show();
-                    });
+                    showBiometricErrorDialog(getString(R.string.biometric_hardward_currently_not_available),
+                            getString(R.string.biometric_hardward_currently_not_available),
+                            null);
                     break;
                 case BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED:
-                    // The user hasn't associated any biometric credentials with their account/device.
-                    handler.post(() -> {
-                        new AlertDialog.Builder(activity)
-                                .setTitle("Biometric authentication not enrolled")
-                                .setMessage("Please enroll biometric authentication " +
-                                        "to use KeyStore encryption")
-                                .setPositiveButton(android.R.string.ok, (dialog, which) -> {
-                                    state = State.INPUT;
-                                    Intent enrollIntent = new Intent(Settings.ACTION_SECURITY_SETTINGS);
-                                    biometricEnrollmentResultLauncher.launch(enrollIntent);
-                                })
-                                .setIcon(android.R.drawable.ic_dialog_alert)
-                                .show();
-                    });
+                    showBiometricErrorDialog(getString(R.string.biometric_auth_not_enrolled),
+                            getString(R.string.biometric_auth_not_enrolled_info),
+                            () -> biometricEnrollmentResultLauncher.launch(new Intent(Settings.ACTION_SECURITY_SETTINGS)));
                     break;
                 case BiometricManager.BIOMETRIC_ERROR_SECURITY_UPDATE_REQUIRED:
-                    // A security update is required before biometrics can be used.
-                    handler.post(() -> {
-                        new AlertDialog.Builder(activity)
-                                .setTitle("Security update required")
-                                .setMessage("A security update is required to use " +
-                                        "KeyStore encryption with biometric authentication")
-                                .setPositiveButton(android.R.string.ok, (dialog, which) -> {
-                                    state = State.INPUT;
-                                    updateView();
-                                })
-                                .setIcon(android.R.drawable.ic_dialog_alert)
-                                .show();
-                    });
+                    showBiometricErrorDialog(getString(R.string.biometric_update_required),
+                            getString(R.string.biometric_update_required_info),
+                            null);
                     break;
                 case BiometricManager.BIOMETRIC_ERROR_UNSUPPORTED:
-                    // The specified options are incompatible with the current Android version.
-                    handler.post(() -> {
-                        new AlertDialog.Builder(activity)
-                                .setTitle("Unsupported android version")
-                                .setMessage("This android version does not support the " +
-                                        "required strong biometric authentication " +
-                                        "(fingerprint, iris, or face)")
-                                .setPositiveButton(android.R.string.ok, (dialog, which) -> {
-                                    state = State.INPUT;
-                                    updateView();
-                                })
-                                .setIcon(android.R.drawable.ic_dialog_alert)
-                                .show();
-                    });
+                    showBiometricErrorDialog(getString(R.string.biometric_unsupported_version),
+                            getString(R.string.biometric_unsupported_version_info),
+                            null);
                     break;
                 case BiometricManager.BIOMETRIC_STATUS_UNKNOWN:
                 default:
-                    // Unable to determine whether the user can authenticate.
-                    handler.post(() -> {
-                        new AlertDialog.Builder(activity)
-                                .setTitle("Unknown error")
-                                .setMessage("An unknown error occured. Please make sure " +
-                                        "this device supports strong biometric authentication " +
-                                        "(fingerprint, iris, or face)")
-                                .setPositiveButton(android.R.string.ok, (dialog, which) -> {
-                                    state = State.INPUT;
-                                    updateView();
-                                })
-                                .setIcon(android.R.drawable.ic_dialog_alert)
-                                .show();
-                    });
+                    showBiometricErrorDialog(getString(R.string.biometric_unknown_error),
+                            getString(R.string.biometric_unknown_error_info),
+                            null);
                     break;
             }
         });
@@ -577,5 +515,23 @@ public class EncryptKeysDialogFragment extends DialogFragment {
             positiveButton.setEnabled(false);
             negativeButton.setEnabled(false);
         }
+    }
+
+    private void showBiometricErrorDialog(String title, String message, @Nullable Runnable positiveAction) {
+        handler.post(() -> {
+            AlertDialog.Builder builder = new AlertDialog.Builder(activity)
+                    .setTitle(title)
+                    .setMessage(message)
+                    .setIcon(android.R.drawable.ic_dialog_alert)
+                    .setPositiveButton(android.R.string.ok, (dialog, which) -> {
+                        if (positiveAction != null) {
+                            positiveAction.run();
+                        } else {
+                            state = State.INPUT;
+                            updateView();
+                        }
+                    });
+            builder.show();
+        });
     }
 }
