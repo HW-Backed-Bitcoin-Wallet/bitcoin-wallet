@@ -28,6 +28,7 @@ import org.bitcoinj.base.BitcoinNetwork;
 import org.bitcoinj.base.Coin;
 import org.bitcoinj.base.ScriptType;
 import org.bitcoinj.core.Context;
+import org.bitcoinj.core.NetworkParameters;
 import org.bitcoinj.params.BitcoinNetworkParams;
 import org.bitcoinj.params.MainNetParams;
 import org.bitcoinj.params.TestNet3Params;
@@ -44,7 +45,7 @@ import java.util.concurrent.TimeUnit;
 public final class Constants {
 
     /** Network this wallet is on (e.g. testnet or mainnet). */
-    public static final BitcoinNetworkParams NETWORK_PARAMETERS =
+    public static final NetworkParameters NETWORK_PARAMETERS =
             !BuildConfig.FLAVOR.equals("prod") ? TestNet3Params.get() : MainNetParams.get();
 
     /** Bitcoinj global context. */

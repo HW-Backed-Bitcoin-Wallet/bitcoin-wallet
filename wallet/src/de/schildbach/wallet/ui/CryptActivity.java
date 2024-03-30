@@ -11,6 +11,7 @@ import android.view.View;
 import android.widget.Button;
 
 
+import org.bitcoinj.core.Context;
 import org.bitcoinj.crypto.AesKey;
 import org.bitcoinj.crypto.KeyCrypterException;
 import org.bitcoinj.wallet.Wallet;
@@ -32,7 +33,6 @@ public class CryptActivity extends Activity {
     protected static final Logger log = LoggerFactory.getLogger(AbstractWalletActivity.class);
 
     private Wallet wallet;
-
     private WalletApplication application;
     private Configuration config;
 
@@ -48,12 +48,14 @@ public class CryptActivity extends Activity {
         this.application = (WalletApplication) getApplication();
         this.wallet = application.getWallet();
         this.config = application.getConfiguration();
+        final Context context = Context.get();
 
 
         Button btn = (Button) findViewById(R.id.crypt_button);
         btn.setOnClickListener(view -> {
             Executor executor = Executors.newSingleThreadExecutor();
             executor.execute(() -> {
+                Context.propagate(context);
                 doCrypto();
                 finish();
             });

@@ -70,6 +70,7 @@ import de.schildbach.wallet.WalletApplication;
 import de.schildbach.wallet.addressbook.AddressBookDao;
 import de.schildbach.wallet.addressbook.AddressBookDatabase;
 import de.schildbach.wallet.addressbook.AddressBookEntry;
+import de.schildbach.wallet.crypto.KeyStoreKeyCrypter;
 import de.schildbach.wallet.data.PaymentIntent;
 import de.schildbach.wallet.data.PaymentIntent.Standard;
 import de.schildbach.wallet.offline.DirectPaymentTask;
@@ -635,7 +636,7 @@ public final class SendCoinsFragment extends Fragment {
         final Wallet wallet = walletActivityViewModel.wallet.getValue();
         if (wallet == null)
             return false;
-        if (!wallet.isEncrypted())
+        if (!wallet.isEncrypted() && !(wallet.getKeyCrypter() instanceof KeyStoreKeyCrypter))
             return true;
         return !privateKeyPasswordView.getText().toString().trim().isEmpty();
     }
@@ -662,7 +663,7 @@ public final class SendCoinsFragment extends Fragment {
         privateKeyBadPasswordView.setVisibility(View.INVISIBLE);
 
         final Wallet wallet = walletActivityViewModel.wallet.getValue();
-        if (wallet.isEncrypted()) {
+        if (wallet.isEncrypted() && !(wallet.getKeyCrypter() instanceof KeyStoreKeyCrypter)) {
             new DeriveKeyTask(backgroundHandler, application.scryptIterationsTarget()) {
                 @Override
                 protected void onSuccess(final AesKey encryptionKey, final boolean wasChanged) {
@@ -673,6 +674,9 @@ public final class SendCoinsFragment extends Fragment {
             }.deriveKey(wallet, privateKeyPasswordView.getText().toString().trim());
 
             setState(SendCoinsViewModel.State.DECRYPTING);
+        } else if (wallet.isEncrypted() && wallet.getKeyCrypter() instanceof KeyStoreKeyCrypter) {
+            AesKey unusedAesKey = new AesKey(new byte[0]);
+            signAndSendPayment(unusedAesKey);
         } else {
             signAndSendPayment(null);
         }
@@ -1048,7 +1052,7 @@ public final class SendCoinsFragment extends Fragment {
 
             final boolean privateKeyPasswordViewVisible = (viewModel.state == SendCoinsViewModel.State.INPUT
                     || viewModel.state == SendCoinsViewModel.State.DECRYPTING) && wallet != null
-                    && wallet.isEncrypted();
+                    && wallet.isEncrypted() && !(wallet.getKeyCrypter() instanceof KeyStoreKeyCrypter);
             privateKeyPasswordViewGroup.setVisibility(privateKeyPasswordViewVisible ? View.VISIBLE : View.GONE);
             privateKeyPasswordView.setEnabled(viewModel.state == SendCoinsViewModel.State.INPUT);
 
