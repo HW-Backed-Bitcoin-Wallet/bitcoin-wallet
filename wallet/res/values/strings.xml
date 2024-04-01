@@ -354,6 +354,11 @@
     <string name="biometric_unsupported_version_info">This android version does not support the required strong biometric authentication (fingerprint, iris, or face)</string>
     <string name="biometric_unknown_error">Unknown error</string>
     <string name="biometric_unknown_error_info">An unknown error occurred. Please make sure this device supports strong biometric authentication (fingerprint, iris, or face)</string>
+    <string name="biometric_auth">Biometric Authentication</string>
+    <string name="biometric_auth_required_info">Authentication is required to continue</string>
+    <string name="biometric_auth_utilised_info">This app uses biometric authentication to protect your data.</string>
+    <string name="biometric_auth_cancelled">Authentication cancelled</string>
+
 
     <!-- generic buttons -->
     <string name="button_ok">OK</string>

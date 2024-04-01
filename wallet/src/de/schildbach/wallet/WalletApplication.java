@@ -52,6 +52,8 @@ import de.schildbach.wallet.util.Bluetooth;
 import de.schildbach.wallet.util.CrashReporter;
 import de.schildbach.wallet.util.Toast;
 import de.schildbach.wallet.util.WalletUtils;
+
+import org.bitcoinj.base.BitcoinNetwork;
 import org.bitcoinj.core.VersionMessage;
 import org.bitcoinj.crypto.KeyCrypterFactory;
 import org.bitcoinj.crypto.KeyCrypterScrypt;
