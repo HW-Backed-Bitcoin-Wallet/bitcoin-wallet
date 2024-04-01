@@ -214,7 +214,8 @@ public class WalletApplication extends Application {
                     final Duration duration = Duration.ofMillis(Constants.Files.WALLET_AUTOSAVE_DELAY_MS);
                     walletFiles = wallet.autosaveToFile(walletFile, duration, null);
                 } else {
-                    final Stopwatch watch = Stopwatch.createStarted();wallet = Wallet.createDeterministic(Constants.NETWORK_PARAMETERS.network(),
+                    final Stopwatch watch = Stopwatch.createStarted();
+                    wallet = Wallet.createDeterministic(Constants.NETWORK_PARAMETERS.network(),
                             Constants.DEFAULT_OUTPUT_SCRIPT_TYPE);
                     final Duration duration = Duration.ofMillis(Constants.Files.WALLET_AUTOSAVE_DELAY_MS);
                     walletFiles = wallet.autosaveToFile(walletFile, duration, null);

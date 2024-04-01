@@ -14,6 +14,6 @@ public class KeyStoreKeyCrypterFactory implements KeyCrypterFactory {
 
     @Override
     public KeyCrypter createKeyCrypter() {
-        return new KeyStoreKeyCrypter(context);
+        return new HWKeyCrypter(context);
     }
 }

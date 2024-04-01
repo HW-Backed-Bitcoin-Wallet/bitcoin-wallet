@@ -47,7 +47,7 @@ import com.google.common.io.CharStreams;
 import de.schildbach.wallet.Constants;
 import de.schildbach.wallet.R;
 import de.schildbach.wallet.WalletApplication;
-import de.schildbach.wallet.crypto.KeyStoreKeyCrypter;
+import de.schildbach.wallet.crypto.HWKeyCrypter;
 import de.schildbach.wallet.ui.AbstractWalletActivity;
 import de.schildbach.wallet.ui.AbstractWalletActivityViewModel;
 import de.schildbach.wallet.ui.DialogBuilder;
@@ -113,7 +113,7 @@ public class BackupWalletDialogFragment extends DialogFragment {
                                 @Override
                                 public void onChanged(final Wallet wallet) {
                                     walletActivityViewModel.wallet.removeObserver(this);
-                                    if (wallet.getKeyCrypter() instanceof KeyStoreKeyCrypter) {
+                                    if (wallet.getKeyCrypter() instanceof HWKeyCrypter) {
                                         startCrypt.launch(new Intent(getContext(),CryptActivity.class));
                                     } else {
                                         saveBackup(uri, false);

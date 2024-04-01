@@ -19,7 +19,7 @@ import de.schildbach.wallet.Configuration;
 import de.schildbach.wallet.Constants;
 import de.schildbach.wallet.R;
 import de.schildbach.wallet.WalletApplication;
-import de.schildbach.wallet.crypto.KeyStoreKeyCrypter;
+import de.schildbach.wallet.crypto.HWKeyCrypter;
 
 public class CryptActivity extends Activity {
 
@@ -37,7 +37,6 @@ public class CryptActivity extends Activity {
         log.info("Referrer: {}", getReferrer());
         setContentView(R.layout.crypt_content);
 
-
         this.application = (WalletApplication) getApplication();
         this.wallet = application.getWallet();
         this.config = application.getConfiguration();
@@ -54,9 +53,10 @@ public class CryptActivity extends Activity {
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
+        // Close the activity when the back arrow is pressed
         if (item.getItemId() == android.R.id.home) {
             setResult(Activity.RESULT_CANCELED);
-            finish();  // Close the activity when the back arrow is pressed
+            finish();
             return true;
         }
         return super.onOptionsItemSelected(item);
@@ -64,15 +64,16 @@ public class CryptActivity extends Activity {
 
     protected void doCrypto() {
         try {
-            final KeyStoreKeyCrypter keyCrypter = new KeyStoreKeyCrypter(getApplicationContext());
+            final HWKeyCrypter keyCrypter = new HWKeyCrypter(getApplicationContext());
             final AesKey newKey = wallet.isEncrypted() != true ? keyCrypter.deriveKey(null) : null;
 
             // Decrypt wallet
             if (wallet.isEncrypted()) {
-                wallet.decrypt("1"); // Password is not needed but required by the KeyCrypter interface
+                wallet.decrypt("unusedPassword");
                 log.info("wallet successfully decrypted");
                 setResult(Activity.RESULT_OK);
             }
+
             // Use opportunity to maybe upgrade wallet
             if (wallet.isDeterministicUpgradeRequired(Constants.UPGRADE_OUTPUT_SCRIPT_TYPE)
                     && !wallet.isEncrypted())

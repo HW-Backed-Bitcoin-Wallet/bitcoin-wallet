@@ -52,7 +52,7 @@ import de.schildbach.wallet.Configuration;
 import de.schildbach.wallet.Constants;
 import de.schildbach.wallet.R;
 import de.schildbach.wallet.WalletApplication;
-import de.schildbach.wallet.crypto.KeyStoreKeyCrypter;
+import de.schildbach.wallet.crypto.HWKeyCrypter;
 import de.schildbach.wallet.util.WalletUtils;
 
 import org.bitcoinj.crypto.AesKey;
@@ -407,11 +407,11 @@ public class EncryptKeysDialogFragment extends DialogFragment {
             if (wallet.isEncrypted()) {
                 KeyCrypter keyCrypter = wallet.getKeyCrypter();
 
-                if (keyCrypter instanceof KeyStoreKeyCrypter) {
+                if (keyCrypter instanceof HWKeyCrypter) {
                     radioSpendingPin.setEnabled(false);
                     radioKeyStore.setEnabled(true);
                     radioKeyStore.setChecked(true);
-                } else if (keyCrypter instanceof KeyCrypterScrypt && !(keyCrypter instanceof KeyStoreKeyCrypter)) {
+                } else if (keyCrypter instanceof KeyCrypterScrypt && !(keyCrypter instanceof HWKeyCrypter)) {
                     radioKeyStore.setEnabled(false);
                     radioSpendingPin.setEnabled(true);
                     radioSpendingPin.setChecked(true);

@@ -8,8 +8,16 @@
         android:id="@+id/crypt_instruction_text"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Fingerprint scanner"
+        android:text="Biometric Authentication"
         android:layout_centerHorizontal="true"
-        android:layout_marginBottom="24dp"/>
+        android:layout_marginBottom="24dp"
+        android:layout_above="@+id/progressBar"/>
+
+    <ProgressBar
+        android:id="@+id/progressBar"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_centerInParent="true"
+        android:indeterminate="true"/>
 
 </RelativeLayout>

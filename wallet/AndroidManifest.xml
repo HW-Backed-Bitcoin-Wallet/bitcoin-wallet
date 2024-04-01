@@ -215,7 +215,7 @@
         <activity
             android:name="de.schildbach.wallet.ui.CryptActivity"
             android:configChanges="keyboard|keyboardHidden"
-            android:label="crypt_activity"
+            android:label="Biometric Authentication"
             android:theme="@style/My.Theme.ChildActivity" />
 
         <provider

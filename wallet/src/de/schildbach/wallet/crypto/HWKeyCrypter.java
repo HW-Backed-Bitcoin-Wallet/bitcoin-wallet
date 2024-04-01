@@ -2,7 +2,6 @@
 package de.schildbach.wallet.crypto;
 
 import android.content.Context;
-import android.content.DialogInterface;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.CancellationSignal;
@@ -53,9 +52,9 @@ import com.google.protobuf.ByteString;
 
 import de.schildbach.wallet.R;
 
-public class KeyStoreKeyCrypter extends KeyCrypterScrypt {
+public class HWKeyCrypter extends KeyCrypterScrypt {
 
-    private static final Logger log = LoggerFactory.getLogger(KeyStoreKeyCrypter.class);
+    private static final Logger log = LoggerFactory.getLogger(HWKeyCrypter.class);
     private static final int TAG_LENGTH = 128; // bits
     private static final int KEY_LENGTH = 256; // bits
     private static final int KEY_AUTHENTICATION_DURATION = 5; // seconds
@@ -64,9 +63,15 @@ public class KeyStoreKeyCrypter extends KeyCrypterScrypt {
     private CompletableFuture<byte[]> decryptionFuture;
     private byte[] currentPlainBytes;
     private EncryptedData currentEncryptedData;
+    private ScryptParameters scryptParameters;
 
-    public KeyStoreKeyCrypter(Context context) {
+    public HWKeyCrypter(Context context) {
         this.context = context;
+        // ScryptParameters are only set because they are used to check if
+        // the wallet is encrypted or not when reading the wallet from protobuf
+        ScryptParameters.Builder scryptParametersBuilder = Protos.ScryptParameters.newBuilder().setSalt(
+                ByteString.copyFrom(new byte[0]));
+        this.scryptParameters = scryptParametersBuilder.build();
     }
 
     /**
@@ -175,6 +180,7 @@ public class KeyStoreKeyCrypter extends KeyCrypterScrypt {
 
         try {
             byte[] decryptedBytes = decryptionFuture.get();
+            scryptParameters = null;
             return decryptedBytes;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -257,7 +263,7 @@ public class KeyStoreKeyCrypter extends KeyCrypterScrypt {
             cipher = Cipher.getInstance(KEY_STORE_TRANSFORMATION);
             cipher.init(Cipher.ENCRYPT_MODE, secretKey);
             byte[] encryptedText = cipher.doFinal(plainBytes);
-            return new EncryptedData(cipher.getIV(), encryptedText);
+            return new EncryptedData(cipher.getIV(), encryptedText, EncryptionType.ENCRYPTED_KEYSTORE_AES);
         } catch (UserNotAuthenticatedException e) {
             throw new UserNotAuthenticatedException("User must authenticate");
         }
