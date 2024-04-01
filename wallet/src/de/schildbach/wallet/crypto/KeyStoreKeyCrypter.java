@@ -64,18 +64,15 @@ public class KeyStoreKeyCrypter extends KeyCrypterScrypt {
     private CompletableFuture<byte[]> decryptionFuture;
     private byte[] currentPlainBytes;
     private EncryptedData currentEncryptedData;
-    private ScryptParameters scryptParameters;
 
     public KeyStoreKeyCrypter(Context context) {
         this.context = context;
-        byte[] bytes = "KeyStoreKeyCrypter".getBytes();
-        ScryptParameters.Builder scryptParametersBuilder = Protos.ScryptParameters.newBuilder().setSalt(
-                ByteString.copyFrom(bytes));
-        this.scryptParameters = scryptParametersBuilder.build();
     }
 
     /**
-     * Generates a key in the android key store
+     * Generates a key in the android key store.
+     * The provided password and the returned AesKey are not used and only provided because
+     * the class is extended by KeyCrypterScrypt which requires a password.
      *
      * @return AesKey
      * @throws KeyCrypterException
@@ -178,7 +175,6 @@ public class KeyStoreKeyCrypter extends KeyCrypterScrypt {
 
         try {
             byte[] decryptedBytes = decryptionFuture.get();
-            scryptParameters = null;
             return decryptedBytes;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();

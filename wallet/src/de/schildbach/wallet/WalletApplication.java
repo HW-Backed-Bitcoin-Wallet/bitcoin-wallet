@@ -42,7 +42,6 @@ import com.google.common.hash.HashCode;
 import com.google.common.hash.Hasher;
 import com.google.common.hash.Hashing;
 import com.google.common.util.concurrent.SettableFuture;
-import com.google.protobuf.ByteString;
 
 import de.schildbach.wallet.crypto.KeyStoreKeyCrypterFactory;
 import de.schildbach.wallet.service.BlockchainService;
@@ -52,16 +51,11 @@ import de.schildbach.wallet.util.Bluetooth;
 import de.schildbach.wallet.util.CrashReporter;
 import de.schildbach.wallet.util.Toast;
 import de.schildbach.wallet.util.WalletUtils;
-
-import org.bitcoinj.base.BitcoinNetwork;
 import org.bitcoinj.core.VersionMessage;
 import org.bitcoinj.crypto.KeyCrypterFactory;
-import org.bitcoinj.crypto.KeyCrypterScrypt;
 import org.bitcoinj.crypto.MnemonicCode;
 import org.bitcoinj.utils.ContextPropagatingThreadFactory;
 import org.bitcoinj.utils.Threading;
-import org.bitcoinj.wallet.DeterministicSeed;
-import org.bitcoinj.protobuf.wallet.Protos;
 import org.bitcoinj.wallet.UnreadableWalletException;
 import org.bitcoinj.wallet.Wallet;
 import org.bitcoinj.wallet.WalletFiles;
@@ -220,12 +214,7 @@ public class WalletApplication extends Application {
                     final Duration duration = Duration.ofMillis(Constants.Files.WALLET_AUTOSAVE_DELAY_MS);
                     walletFiles = wallet.autosaveToFile(walletFile, duration, null);
                 } else {
-                    final Stopwatch watch = Stopwatch.createStarted();
-                    /*DeterministicSeed seed = new DeterministicSeed(
-                            "dress girl cool artist dinosaur abstract adult agree puzzle torch domain present",
-                            null, "", 0);
-                    wallet = Wallet.fromSeed(Constants.NETWORK_PARAMETERS, seed, Constants.DEFAULT_OUTPUT_SCRIPT_TYPE);*/
-                    wallet = Wallet.createDeterministic(Constants.NETWORK_PARAMETERS.network(),
+                    final Stopwatch watch = Stopwatch.createStarted();wallet = Wallet.createDeterministic(Constants.NETWORK_PARAMETERS.network(),
                             Constants.DEFAULT_OUTPUT_SCRIPT_TYPE);
                     final Duration duration = Duration.ofMillis(Constants.Files.WALLET_AUTOSAVE_DELAY_MS);
                     walletFiles = wallet.autosaveToFile(walletFile, duration, null);
