@@ -47,7 +47,7 @@ android {
 
     defaultConfig {
         applicationId 'de.schildbach'
-        minSdkVersion 28
+        minSdkVersion 26
     }
 
     buildTypes {
