@@ -82,63 +82,59 @@ public class HWKeyCrypter extends KeyCrypterScrypt {
      * @return AesKey
      * @throws KeyCrypterException
      */
-    @RequiresApi(api = Build.VERSION_CODES.R)
+
     @Override
     public AesKey deriveKey(CharSequence unusedPassword) throws KeyCrypterException {
-        KeyStore keyStore;
+        log.info("Available KeyStore providers: {}", Arrays.toString(Security.getProviders()));
         try {
-            log.info("Available KeyStore providers: {}", Arrays.toString(Security.getProviders()));
-            keyStore = KeyStore.getInstance(KEY_STORE_PROVIDER);
+            KeyStore keyStore = KeyStore.getInstance(KEY_STORE_PROVIDER);
             keyStore.load(null);
-            if (!keyStore.containsAlias(KEY_STORE_KEY_REF)) {
-                KeyGenerator keyGenerator;
-                try {
-                    keyGenerator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, KEY_STORE_PROVIDER);
-                    KeyGenParameterSpec keyGenParameterSpec;
-                    // If else block to indicate a preference to use the embedded Secure Element over other hardware security modules like e.g. the TEE
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                        if (context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_STRONGBOX_KEYSTORE)) {
-                            keyGenParameterSpec = new KeyGenParameterSpec.Builder(KEY_STORE_KEY_REF,
-                                    KeyProperties.PURPOSE_ENCRYPT | KeyProperties.PURPOSE_DECRYPT)
-                                    .setKeySize(KEY_LENGTH)
-                                    .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-                                    .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-                                    .setUserAuthenticationRequired(true)
-                                    .setInvalidatedByBiometricEnrollment(true)
-                                    .setUserAuthenticationParameters(KEY_AUTHENTICATION_DURATION, KeyProperties.AUTH_BIOMETRIC_STRONG)
-                                    .setIsStrongBoxBacked(true)
-                                    .build();
-                        } else {
-                            keyGenParameterSpec = new KeyGenParameterSpec.Builder(KEY_STORE_KEY_REF,
-                                    KeyProperties.PURPOSE_ENCRYPT | KeyProperties.PURPOSE_DECRYPT)
-                                    .setKeySize(KEY_LENGTH)
-                                    .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-                                    .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-                                    .setUserAuthenticationRequired(true)
-                                    .setInvalidatedByBiometricEnrollment(true)
-                                    .setUserAuthenticationParameters(KEY_AUTHENTICATION_DURATION, KeyProperties.AUTH_BIOMETRIC_STRONG)
-                                    .setIsStrongBoxBacked(false)
-                                    .build();
-                        }
-                        log.info("Using SE: " + keyGenParameterSpec.isStrongBoxBacked());
-                    } else {
-                        log.info("Android version 28 or higher is required for KeyStore encryption");
-                        throw new KeyCrypterException("Android version 28 or higher is required for KeyStore encryption");
-                    }
-                    keyGenerator.init(keyGenParameterSpec);
-                } catch (NoSuchAlgorithmException | NoSuchProviderException | InvalidAlgorithmParameterException e) {
-                    log.info("Exception was " + e.getClass());
-                    throw new KeyCrypterException("Exception: ", e);
-                }
 
+            if (!keyStore.containsAlias(KEY_STORE_KEY_REF)) {
+                KeyGenerator keyGenerator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, KEY_STORE_PROVIDER);
+                KeyGenParameterSpec keyGenParameterSpec = buildKeyGenParameterSpec();
+                keyGenerator.init(keyGenParameterSpec);
                 keyGenerator.generateKey();
             }
-        } catch (NoSuchAlgorithmException | IOException | KeyStoreException | CertificateException e) {
-            throw new RuntimeException(e);
+        } catch (NoSuchAlgorithmException | IOException | KeyStoreException | CertificateException |
+                 InvalidAlgorithmParameterException | NoSuchProviderException e) {
+            throw new KeyCrypterException("Key generation error", e);
         }
 
         // Unused return
         return new AesKey(new byte[0]);
+    }
+
+    /**
+     * Builds the {@link KeyGenParameterSpec} based on the device's Android version and hardware capabilities.
+     *
+     * @return A configured {@link KeyGenParameterSpec} instance for key generation.
+     * @throws KeyCrypterException If the Android version is not supported or if any other configuration error occurs.
+     */
+    private KeyGenParameterSpec buildKeyGenParameterSpec() throws KeyCrypterException {
+        KeyGenParameterSpec.Builder builder = new KeyGenParameterSpec.Builder(KEY_STORE_KEY_REF,
+                KeyProperties.PURPOSE_ENCRYPT | KeyProperties.PURPOSE_DECRYPT)
+                .setKeySize(KEY_LENGTH)
+                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                .setUserAuthenticationRequired(true)
+                .setInvalidatedByBiometricEnrollment(true);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+                builder.setUserAuthenticationValidityDurationSeconds(KEY_AUTHENTICATION_DURATION);
+            } else {
+                boolean isStrongBoxAvailable = context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_STRONGBOX_KEYSTORE);
+                builder.setIsStrongBoxBacked(isStrongBoxAvailable)
+                        .setUserAuthenticationParameters(KEY_AUTHENTICATION_DURATION, KeyProperties.AUTH_BIOMETRIC_STRONG);
+                log.info("Using StrongBox: " + isStrongBoxAvailable);
+            }
+        } else {
+            log.info("Android version 28 or higher is required for KeyStore encryption");
+            throw new KeyCrypterException("Android version 28 or higher is required for KeyStore encryption");
+        }
+
+        return builder.build();
     }
 
     /**
@@ -164,13 +160,8 @@ public class HWKeyCrypter extends KeyCrypterScrypt {
         decryptionFuture = new CompletableFuture<>();
         this.currentEncryptedData = dataToDecrypt;
 
-        Thread test = Looper.getMainLooper().getThread();
-        log.info("Crypter", "Dec main thread is: " + test.getName());
-
         // Move to the UI thread to call authenticate
-        log.info("got right in front of decrypt new Handler call");
         new Handler(Looper.getMainLooper()).post(() -> {
-            log.info("Is Main Thread: " + (Looper.myLooper() == Looper.getMainLooper()));
             try {
                 createBiometricPrompt(false);
             } catch (Exception e) {
@@ -236,7 +227,6 @@ public class HWKeyCrypter extends KeyCrypterScrypt {
 
         // Move to the UI thread to call authenticate
         new Handler(Looper.getMainLooper()).post(() -> {
-            log.info("Is Main Thread: " + (Looper.myLooper() == Looper.getMainLooper()));
             try {
                 createBiometricPrompt(true);
             } catch (Exception e) {
