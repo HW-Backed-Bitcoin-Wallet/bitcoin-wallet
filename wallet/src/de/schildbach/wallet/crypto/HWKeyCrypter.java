@@ -266,9 +266,6 @@ public class HWKeyCrypter extends KeyCrypterScrypt {
     /**
      * Return the EncryptionType enum value which denotes the type of encryption/ decryption that this KeyCrypter
      * can understand.
-     * For the Bitcoinj KeyCrypter interface only the Enum values of ENCRYPTED_SCRYPT_AES and UNENCRYPTED are supported.
-     * As none match fully, we need to make due with what we got. We can take the ENCRYPTED_SCRYPT_AES enum even though
-     * we don't use a passphrase based KDF of scrypt, as we are using the secure element of the Android device.
      */
 
     @Override
