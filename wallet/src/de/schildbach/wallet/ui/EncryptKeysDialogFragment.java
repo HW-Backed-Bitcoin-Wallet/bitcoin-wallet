@@ -28,6 +28,8 @@ import android.graphics.Typeface;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.biometric.BiometricManager;
+
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -403,6 +405,7 @@ public class EncryptKeysDialogFragment extends DialogFragment {
         if (dialog == null)
             return;
 
+
         if (state == State.INPUT) {
             if (wallet.isEncrypted()) {
                 KeyCrypter keyCrypter = wallet.getKeyCrypter();
@@ -420,8 +423,12 @@ public class EncryptKeysDialogFragment extends DialogFragment {
                     throw new RuntimeException("The wallet has encryption of type '" + keyCrypter.getUnderstoodEncryptionType() + "' but this is not supported.");
                 }
             } else {
-                radioKeyStore.setEnabled(true);
                 radioSpendingPin.setEnabled(true);
+                radioKeyStore.setEnabled(true);
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
+                    // Encryption with Android KeyStore requires at least API 28
+                    radioKeyStore.setEnabled(false);
+                }
             }
         }
 
