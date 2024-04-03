@@ -218,7 +218,7 @@
     <string name="encrypt_keys_dialog_title">Wallet protection</string>
     <string name="encrypt_keys_dialog_radio_spending_pin">Spending PIN</string>
     <string name="encrypt_keys_dialog_radio_keystore">KeyStore</string>
-    <string name="encrypt_keys_dialog_message_keystore">Spending from your wallet will require biometric authentication (fingerprint, face scan).</string>
+    <string name="encrypt_keys_dialog_message_keystore">Spending from your wallet will require biometric authentication (fingerprint, iris, face scan).</string>
     <string name="encrypt_keys_dialog_message_spending_pin">Spending from your wallet will be protected with the chosen PIN.</string>
     <string name="encrypt_keys_dialog_warning_spending_pin">Important: You need to remember your PIN! Do not use common numbers (like birthdates).</string>
     <string name="encrypt_keys_dialog_warning_keystore">Important: Your encryption key will be bound to your device. Be sure to make a back up to avoid losing access to your funds if the device is lost.</string>
