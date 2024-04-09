@@ -35,12 +35,12 @@ import de.schildbach.wallet.util.Assets;
 import okio.BufferedSink;
 import okio.BufferedSource;
 import okio.Okio;
-import org.bitcoinj.core.Address;
-import org.bitcoinj.core.Coin;
-import org.bitcoinj.core.ECKey;
-import org.bitcoinj.core.LegacyAddress;
-import org.bitcoinj.core.SegwitAddress;
-import org.bitcoinj.core.Sha256Hash;
+import org.bitcoinj.base.Address;
+import org.bitcoinj.base.Coin;
+import org.bitcoinj.crypto.ECKey;
+import org.bitcoinj.base.LegacyAddress;
+import org.bitcoinj.base.SegwitAddress;
+import org.bitcoinj.base.Sha256Hash;
 import org.bitcoinj.core.Transaction;
 import org.bitcoinj.core.UTXO;
 import org.bitcoinj.script.Script;
@@ -65,6 +65,7 @@ import java.io.InputStreamReader;
 import java.net.ConnectException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
@@ -235,8 +236,7 @@ public final class RequestWalletBalanceTask {
                                         log.info("{} - missing result", server.socketAddress);
                                         return null;
                                     }
-                                    final Transaction tx = new Transaction(Constants.NETWORK_PARAMETERS,
-                                            Constants.HEX.decode(transactionResponse.result));
+                                    final Transaction tx = Transaction.read(ByteBuffer.wrap(Constants.HEX.decode(transactionResponse.result)));
                                     if (!tx.getTxId().equals(utxo.getHash()))
                                         log.warn("{} - lied about txid", server.socketAddress);
                                     else if (!tx.getOutput(utxo.getIndex()).getValue().equals(utxo.getValue()))

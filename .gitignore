@@ -1,7 +1,6 @@
 .gradle/
 gradlew
 gradlew.bat
-gradle/wrapper
 build/
 local.properties
 .classpath
@@ -13,4 +12,3 @@ bin/
 gen/
 .DS_Store
 wallet/.DS_Store
-wallet/libs/
