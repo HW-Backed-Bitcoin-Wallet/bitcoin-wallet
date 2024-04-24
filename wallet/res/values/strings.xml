@@ -206,6 +206,7 @@
     <string name="export_keys_dialog_title">Back up wallet</string>
     <string name="backup_wallet_dialog_message">Your backup will be encrypted with the chosen password and written to external storage.</string>
     <string name="backup_wallet_dialog_warning_encrypted">Your wallet is protected by a spending PIN. Make sure you remember the PIN in addition to the backup password!</string>
+    <string name="backup_wallet_dialog_warning_hw_encrypted">Your wallet is secured with hardware (HW) encryption, which is linked specifically to your device. The backup of your wallet will be protected solely by the backup password, enabling it to be imported on other devices. Please ensure you remember the backup password and reactivate HW encryption after importing the backup file!</string>
     <string name="export_keys_dialog_button_export">Back up</string>
     <string name="export_keys_dialog_success"><![CDATA[<p>Your wallet has been backed up to <tt>%s</tt></p><p><b>If the only place your backup exists is on your device, you run the risk of losing both at the same time!</b></p><p>In any case, make sure you remember your backup password.</p>]]></string>
     <string name="export_keys_dialog_failure">Your wallet could not be backed up:\n%s</string>

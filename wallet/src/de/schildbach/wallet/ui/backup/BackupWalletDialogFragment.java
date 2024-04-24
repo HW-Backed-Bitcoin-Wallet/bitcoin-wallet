@@ -206,8 +206,16 @@ public class BackupWalletDialogFragment extends DialogFragment {
 
             showView.setOnCheckedChangeListener(new ShowPasswordCheckListener(passwordView, passwordAgainView));
 
-            walletActivityViewModel.wallet.observe(BackupWalletDialogFragment.this,
-                    wallet -> warningView.setVisibility(wallet.isEncrypted() ? View.VISIBLE : View.GONE));
+            walletActivityViewModel.wallet.observe(BackupWalletDialogFragment.this, wallet -> {
+                if (wallet.isEncrypted()) {
+                    warningView.setVisibility(View.VISIBLE);
+                    if (wallet.getKeyCrypter() instanceof HWKeyCrypter) {
+                        warningView.setText(R.string.backup_wallet_dialog_warning_hw_encrypted);
+                    }
+                } else {
+                    warningView.setVisibility(View.GONE);
+                }
+            });
             viewModel.password.observe(BackupWalletDialogFragment.this, password -> {
                 passwordMismatchView.setVisibility(View.INVISIBLE);
 
