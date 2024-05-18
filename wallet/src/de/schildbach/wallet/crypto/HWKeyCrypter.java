@@ -121,13 +121,12 @@ public class HWKeyCrypter extends KeyCrypterScrypt {
                 .setInvalidatedByBiometricEnrollment(true);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            boolean isStrongBoxAvailable = context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_STRONGBOX_KEYSTORE);
+            builder.setIsStrongBoxBacked(isStrongBoxAvailable);
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
                 builder.setUserAuthenticationValidityDurationSeconds(KEY_AUTHENTICATION_DURATION);
             } else {
-                boolean isStrongBoxAvailable = context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_STRONGBOX_KEYSTORE);
-                builder.setIsStrongBoxBacked(isStrongBoxAvailable)
-                        .setUserAuthenticationParameters(KEY_AUTHENTICATION_DURATION, KeyProperties.AUTH_BIOMETRIC_STRONG);
-                log.info("Using StrongBox: " + isStrongBoxAvailable);
+                builder.setUserAuthenticationParameters(KEY_AUTHENTICATION_DURATION, KeyProperties.AUTH_BIOMETRIC_STRONG);
             }
         } else {
             log.info("Android version 28 or higher is required for KeyStore encryption");
