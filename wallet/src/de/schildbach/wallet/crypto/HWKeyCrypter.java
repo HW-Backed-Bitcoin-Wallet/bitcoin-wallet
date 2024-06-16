@@ -64,6 +64,7 @@ public class HWKeyCrypter extends KeyCrypterScrypt {
     private byte[] currentPlainBytes;
     private EncryptedData currentEncryptedData;
     private ScryptParameters scryptParameters;
+    long sessionStart;
 
     public HWKeyCrypter(Context context) {
         this.context = context;
@@ -145,7 +146,12 @@ public class HWKeyCrypter extends KeyCrypterScrypt {
     public byte[] decrypt(EncryptedData dataToDecrypt, AesKey unusedAesKey) throws KeyCrypterException {
         log.info("Starting KeyStoreKeyCrypter decrypt method");
         try {
-            return doDecrypt(dataToDecrypt);
+            log.info("Session time was: " + String.valueOf(System.currentTimeMillis() - sessionStart));
+            if (System.currentTimeMillis() - sessionStart < 5000) {
+                return doDecrypt(dataToDecrypt);
+            } else {
+                throw new UserNotAuthenticatedException();
+            }
         } catch (UserNotAuthenticatedException e) {
             // User must authenticate so catch exception and continue
         }
@@ -208,7 +214,13 @@ public class HWKeyCrypter extends KeyCrypterScrypt {
     public EncryptedData encrypt(byte[] plainBytes, AesKey unusedAesKey) throws KeyCrypterException {
         log.info("Starting KeyStoreKeyCrypter encrypt method");
         try {
-            return doEncrypt(plainBytes);
+            log.info("Session time was: " + String.valueOf(System.currentTimeMillis() - sessionStart));
+            if (System.currentTimeMillis() - sessionStart < 5000) {
+                return doEncrypt(plainBytes);
+            } else {
+                throw new UserNotAuthenticatedException();
+            }
+
         } catch (UserNotAuthenticatedException e) {
             // User must authenticate so catch exception and continue
         }
@@ -303,6 +315,7 @@ public class HWKeyCrypter extends KeyCrypterScrypt {
                 @Override
                 public void onAuthenticationSucceeded(BiometricPrompt.AuthenticationResult result) {
                     super.onAuthenticationSucceeded(result);
+                    sessionStart = System.currentTimeMillis();
                     try {
                         if (isEncrypt) {
                             EncryptedData encryptedDataResult = doEncrypt(currentPlainBytes);
